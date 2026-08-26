@@ -1,7 +1,15 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="UTF-8">
+  <link rel="manifest" href="./manifest_monitor.json">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="OE Monitor">
+  <meta name="theme-color" content="#16A34A">
+  <link rel="apple-touch-icon" href="./icon-192.png">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Oliveira Energia - Monitor de Inventario</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
@@ -128,6 +136,16 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .modal-box{background:var(--bg);border:1px solid var(--br);border-radius:16px;padding:1.8rem;width:100%;max-width:480px;display:flex;flex-direction:column;gap:1rem;box-shadow:0 8px 32px rgba(0,0,0,.2)}
 .modal-box h2{font-size:1rem;font-weight:700}
 .modal-btns{display:flex;gap:.5rem;justify-content:flex-end}
+
+/* Filtros e sort */
+.filter-row input{width:100%;padding:.28rem .4rem;background:var(--bg);border:1px solid var(--br);border-radius:5px;color:var(--tx);font-size:.68rem;outline:none}
+.filter-row input:focus{border-color:var(--gn)}
+.filter-row input::placeholder{color:var(--tm)}
+.dt th{cursor:pointer;user-select:none;position:relative}
+.dt th:hover{background:var(--ch)}
+.th-sort{font-size:.6rem;opacity:.5;margin-left:.25rem}
+.th-sort.active{opacity:1;color:var(--gn)}
+.filter-row td{padding:.25rem .3rem;background:var(--cd);border-bottom:2px solid var(--br)}
 ::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:var(--sf)}::-webkit-scrollbar-thumb{background:var(--br);border-radius:3px}
 </style>
 </head>
@@ -268,6 +286,7 @@ function parsePlanilha(buf){
   var ip=h.findIndex(function(x){return x==='produto';});
   var iu=h.findIndex(function(x){return x.indexOf('unid')>=0;});
   var ie=h.findIndex(function(x){return x.indexOf('estoque')>=0;});
+  var ict=h.findIndex(function(x){return x==='controle';});
   var il=h.findIndex(function(x){return x==='local';});
   var ilp=h.findIndex(function(x){return x.indexOf('pai')>=0;});
   if(ic<0)ic=0;if(ip<0)ip=1;if(ie<0)ie=4;if(il<0)il=6;
@@ -284,6 +303,7 @@ function parsePlanilha(buf){
       unidade:String(row[iu]||'').trim(),
       esperado:parseInt(row[ie])||0,
       local:String(row[il]||'').trim(),
+      controle:ict>=0?String(row[ict]||'').trim():'',
       localPai:ilp>=0?String(row[ilp]||'').trim():''
     };
   }
@@ -570,12 +590,22 @@ function setTab(t){
   rTab();
 }
 
+
+// Filtros e ordenação
+var filterVals={cod:'',produto:'',local:'',controle:'',status:''};
+var sortColIdx=-1, sortDir=1;
+
+function setFilter(col,val){filterVals[col]=val.toLowerCase();rTab();}
+function limparFiltros(){filterVals={cod:'',produto:'',local:'',controle:'',status:''};sortColIdx=-1;sortDir=1;rTab();}
+function setSort(idx){if(sortColIdx===idx)sortDir*=-1;else{sortColIdx=idx;sortDir=1;}rTab();}
+
 function rTab(){
   var c=document.getElementById('tabC');
   if(tab==='feed'){rFeed(c);return;}
   if(tab==='ni'){rNi(c);return;}
   if(tab==='cmp'){rCmp(c);return;}
   var m=calcMerged().m;
+
   var rows=Object.entries(itens).map(function(e){
     var cod=e[0],it=e[1],b=m[cod]||0,d=b-it.esperado;
     var st=b===0?'pend':b===it.esperado?'ok':'div';
@@ -583,21 +613,111 @@ function rTab(){
     if(tab==='pend'&&st!=='pend')return null;
     var seps=[];
     Object.entries(sepData).forEach(function(se){if(se[1].bipagens&&se[1].bipagens[cod])seps.push(se[0]);});
-    return{cod:cod,it:it,b:b,d:d,st:st,seps:seps};
+    var nc=false;
+    Object.values(sepData).forEach(function(s){if(s.bipagens&&s.bipagens[cod]&&s.bipagens[cod].naoConformidade)nc=true;});
+    return{cod:cod,it:it,b:b,d:d,st:st,seps:seps,nc:nc};
   }).filter(Boolean);
-  if(!rows.length){c.innerHTML='<div class="empty"><span>\u2713</span>'+(tab==='div'?'Nenhuma divergencia':'Nenhum pendente')+'</div>';return;}
-  var html='<table class="dt"><thead><tr><th>Codigo</th><th>Produto</th><th>Local</th><th style="text-align:right">Esp.</th><th style="text-align:right">Bip.</th><th style="text-align:right">Dif.</th><th>Status</th><th>Separador</th></tr></thead><tbody>';
-  rows.forEach(function(r){
-    html+='<tr><td class="mono">'+r.cod+'</td>'
-      +'<td style="max-width:230px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+r.it.produto+'">'+r.it.produto+'</td>'
-      +'<td style="font-size:.7rem;color:var(--td)">'+r.it.local+'</td>'
-      +'<td style="text-align:right">'+r.it.esperado+'</td>'
-      +'<td style="text-align:right;font-weight:700">'+(r.b||'—')+'</td>'
-      +'<td style="text-align:right" class="'+(r.d>0?'d-p':r.d<0?'d-n':'')+'">'+(r.d===0&&r.b===0?'—':(r.d>0?'+':'')+r.d)+'</td>'
-      +'<td><span class="pill p-'+r.st+'">'+(r.st==='ok'?'Conferido':r.st==='div'?'Divergente':'Pendente')+'</span></td>'
-      +'<td style="font-size:.7rem">'+(r.seps.join(', ')||'—')+'</td></tr>';
+
+  // Filtros de texto
+  if(filterVals.cod)rows=rows.filter(function(r){return r.cod.indexOf(filterVals.cod)>=0;});
+  if(filterVals.produto)rows=rows.filter(function(r){return r.it.produto.toLowerCase().indexOf(filterVals.produto)>=0;});
+  if(filterVals.local)rows=rows.filter(function(r){return r.it.local.toLowerCase().indexOf(filterVals.local)>=0;});
+  if(filterVals.controle)rows=rows.filter(function(r){return (r.it.controle||'').toLowerCase().indexOf(filterVals.controle)>=0;});
+  if(filterVals.status)rows=rows.filter(function(r){
+    var lbl=r.st==='ok'?'conferido':r.st==='div'?'divergente':'pendente';
+    return lbl.indexOf(filterVals.status)>=0;
   });
-  c.innerHTML=html+'</tbody></table>';
+
+  // Ordenação
+  if(sortColIdx>=0){
+    rows.sort(function(a,b){
+      var av,bv;
+      if(sortColIdx===0){av=a.cod;bv=b.cod;}
+      else if(sortColIdx===1){av=a.it.produto;bv=b.it.produto;}
+      else if(sortColIdx===2){av=a.it.local;bv=b.it.local;}
+      else if(sortColIdx===3){av=a.it.controle||'';bv=b.it.controle||'';}
+      else if(sortColIdx===4){av=a.it.esperado;bv=b.it.esperado;}
+      else if(sortColIdx===5){av=a.b;bv=b.b;}
+      else if(sortColIdx===6){av=a.d;bv=b.d;}
+      else if(sortColIdx===7){av=a.st;bv=b.st;}
+      else{av=a.seps.join(',');bv=b.seps.join(',');}
+      if(typeof av==='number')return sortDir*(av-bv);
+      return sortDir*(String(av).localeCompare(String(bv),'pt-BR'));
+    });
+  }
+
+  // Cabeçalho com sort
+  var cols=['Codigo','Produto','Local','Controle','Esp.','Bip.','Dif.','Status','Separador'];
+  var thHtml=cols.map(function(lbl,i){
+    var ico=sortColIdx===i?(sortDir>0?'\u25B2':'\u25BC'):'\u25B2\u25BC';
+    var ac=sortColIdx===i?' style="color:var(--gn)"':'';
+    return '<th onclick="setSort('+i+')" style="cursor:pointer;user-select:none;'+(i>=4&&i<=6?'text-align:right;':'')+'">'
+      +lbl+'<span'+ac+' style="font-size:.58rem;margin-left:.2rem;opacity:.6">'+ico+'</span></th>';
+  }).join('');
+
+  // Linha de filtros
+  var fRow='<tr style="background:var(--cd)">'
+    +'<td style="padding:.22rem .3rem"><input style="width:100%;padding:.22rem .35rem;background:var(--bg);border:1px solid var(--br);border-radius:4px;color:var(--tx);font-size:.67rem;outline:none" placeholder="Filtrar..." value="'+filterVals.cod+'" oninput="setFilter(\'cod\',this.value)"></td>'
+    +'<td style="padding:.22rem .3rem"><input style="width:100%;padding:.22rem .35rem;background:var(--bg);border:1px solid var(--br);border-radius:4px;color:var(--tx);font-size:.67rem;outline:none" placeholder="Filtrar..." value="'+filterVals.produto+'" oninput="setFilter(\'produto\',this.value)"></td>'
+    +'<td style="padding:.22rem .3rem"><input style="width:100%;padding:.22rem .35rem;background:var(--bg);border:1px solid var(--br);border-radius:4px;color:var(--tx);font-size:.67rem;outline:none" placeholder="Filtrar..." value="'+filterVals.local+'" oninput="setFilter(\'local\',this.value)"></td>'
+    +'<td style="padding:.22rem .3rem"><input style="width:100%;padding:.22rem .35rem;background:var(--bg);border:1px solid var(--br);border-radius:4px;color:var(--tx);font-size:.67rem;outline:none" placeholder="Filtrar..." value="'+filterVals.controle+'" oninput="setFilter(\'controle\',this.value)"></td>'
+    +'<td colspan="3" style="padding:.22rem .3rem;font-size:.65rem;color:var(--tm);text-align:center">—</td>'
+    +'<td style="padding:.22rem .3rem"><input style="width:100%;padding:.22rem .35rem;background:var(--bg);border:1px solid var(--br);border-radius:4px;color:var(--tx);font-size:.67rem;outline:none" placeholder="Filtrar..." value="'+filterVals.status+'" oninput="setFilter(\'status\',this.value)"></td>'
+    +'<td style="padding:.22rem .3rem"></td></tr>';
+
+  var temFiltro=Object.values(filterVals).some(function(v){return v;});
+
+  if(!rows.length&&!temFiltro){c.innerHTML='<div class="empty"><span>\u2713</span>'+(tab==='div'?'Nenhuma divergencia':tab==='pend'?'Nenhum pendente':'Sem itens')+'</div>';return;}
+
+  var html='<table class="dt"><thead><tr>'+thHtml+'</tr>'+fRow+'</thead><tbody>';
+  rows.forEach(function(r){
+    var ncTag=r.nc?'<span style="font-size:.58rem;color:var(--yw);margin-left:.2rem">NC</span>':'';
+    var ctrlBadge=r.it.controle?'<span style="background:rgba(180,83,9,.12);color:var(--yw);border-radius:5px;font-size:.6rem;font-weight:700;padding:.08rem .3rem">'+r.it.controle+'</span>':'';
+    html+='<tr>'
+      +'<td class="mono">'+r.cod+'</td>'
+      +'<td style="max-width:210px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+r.it.produto+'">'+r.it.produto+'</td>'
+      +'<td style="font-size:.7rem;color:var(--td)">'+r.it.local+ncTag+'</td>'
+      +'<td>'+ctrlBadge+'</td>'
+      +'<td style="text-align:right">'+r.it.esperado+'</td>'
+      +'<td style="text-align:right;font-weight:700">'+(r.b||'\u2014')+'</td>'
+      +'<td style="text-align:right" class="'+(r.d>0?'d-p':r.d<0?'d-n':'')+'">'+(r.d===0&&r.b===0?'\u2014':(r.d>0?'+':'')+r.d)+'</td>'
+      +'<td><span class="pill p-'+r.st+'">'+(r.st==='ok'?'Conferido':r.st==='div'?'Divergente':'Pendente')+'</span></td>'
+      +'<td style="font-size:.7rem">'+(r.seps.join(', ')||'\u2014')+'</td></tr>';
+  });
+
+  // Não previstos (itens encontrados mas fora da lista)
+  if(tab==='all'||tab==='div'){
+    var naoPrevsAll={};
+    Object.entries(sepData).forEach(function(se){
+      if(!se[1].naoPrevistos)return;
+      Object.entries(se[1].naoPrevistos).forEach(function(np){
+        var cod=np[0],v=np[1];
+        if(!naoPrevsAll[cod])naoPrevsAll[cod]={contagem:0,descricao:v.descricao||'',seps:[]};
+        naoPrevsAll[cod].contagem+=v.contagem||0;
+        naoPrevsAll[cod].seps.push(se[0]);
+      });
+    });
+    Object.entries(naoPrevsAll).forEach(function(e){
+      var cod=e[0],v=e[1];
+      if(filterVals.cod&&cod.indexOf(filterVals.cod)<0)return;
+      if(filterVals.produto&&v.descricao.toLowerCase().indexOf(filterVals.produto)<0)return;
+      html+='<tr style="background:rgba(37,99,235,.04)">'
+        +'<td class="mono">'+cod+'</td>'
+        +'<td style="font-size:.75rem">'+v.descricao+'</td>'
+        +'<td style="font-size:.7rem;color:#2563EB">Nao previsto</td>'
+        +'<td></td>'
+        +'<td style="text-align:right;color:var(--tm)">\u2014</td>'
+        +'<td style="text-align:right;font-weight:700;color:#2563EB">'+v.contagem+'</td>'
+        +'<td style="text-align:right;color:#2563EB">NP</td>'
+        +'<td><span style="background:rgba(37,99,235,.1);color:#2563EB;padding:.1rem .38rem;border-radius:8px;font-size:.65rem;font-weight:700">Nao Previsto</span></td>'
+        +'<td style="font-size:.7rem">'+v.seps.join(', ')+'</td></tr>';
+    });
+  }
+
+  html+='</tbody></table>';
+  if(temFiltro)html+='<div style="font-size:.68rem;color:var(--tm);margin-top:.3rem;padding:.2rem">'
+    +rows.length+' resultado(s) &mdash; <a href="#" onclick="limparFiltros();return false" style="color:var(--gn)">Limpar filtros</a></div>';
+  c.innerHTML=html;
 }
 
 function rFeed(c){
@@ -723,12 +843,12 @@ async function encerrar(){
 
 function exportar(){
   var m=calcMerged().m;
-  var rows=[['Cod.','Produto','Unidade','Local','Qtd.Sistema','Qtd.Fisica','Diferenca','Status','Separadores']];
+  var rows=[['Cod.','Produto','Unidade','Controle','Local','Qtd.Sistema','Qtd.Fisica','Diferenca','Status','Separadores']];
   Object.entries(itens).forEach(function(e){
     var cod=e[0],it=e[1],b=m[cod]||0,d=b-it.esperado;
     var st=b===0?'Pendente':b===it.esperado?'Conferido':'Divergente';
     var seps=[];Object.entries(sepData).forEach(function(se){if(se[1].bipagens&&se[1].bipagens[cod])seps.push(se[0]);});
-    rows.push([cod,it.produto,it.unidade,it.local,it.esperado,b>0?b:0,b>0?d:'',st,seps.join(', ')]);
+    rows.push([cod,it.produto,it.unidade,it.controle||'',it.local,it.esperado,b>0?b:0,b>0?d:'',st,seps.join(', ')]);
   });
   var conf=rows.slice(1).filter(function(r){return r[7]==='Conferido';}).length;
   var tot=rows.length-1;
