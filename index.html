@@ -301,7 +301,7 @@ function parsePlanilha(buf){
     res[cod]={
       produto:String(row[ip]||'').trim(),
       unidade:String(row[iu]||'').trim(),
-      esperado:parseInt(row[ie])||0,
+      esperado:parseFloat(String(row[ie]||'').replace(/,/g,'.'))||0,
       local:String(row[il]||'').trim(),
       controle:ict>=0?String(row[ict]||'').trim():'',
       localPai:ilp>=0?String(row[ilp]||'').trim():''
@@ -592,11 +592,11 @@ function setTab(t){
 
 
 // Filtros e ordenação
-var filterVals={cod:'',produto:'',local:'',controle:'',status:''};
+var filterVals={cod:'',produto:'',unidade:'',local:'',controle:'',status:''};
 var sortColIdx=-1, sortDir=1;
 
 function setFilter(col,val){filterVals[col]=val.toLowerCase();rTab();}
-function limparFiltros(){filterVals={cod:'',produto:'',local:'',controle:'',status:''};sortColIdx=-1;sortDir=1;rTab();}
+function limparFiltros(){filterVals={cod:'',produto:'',unidade:'',local:'',controle:'',status:''};sortColIdx=-1;sortDir=1;rTab();}
 function setSort(idx){if(sortColIdx===idx)sortDir*=-1;else{sortColIdx=idx;sortDir=1;}rTab();}
 
 function rTab(){
@@ -622,6 +622,7 @@ function rTab(){
   if(filterVals.cod)rows=rows.filter(function(r){return r.cod.indexOf(filterVals.cod)>=0;});
   if(filterVals.produto)rows=rows.filter(function(r){return r.it.produto.toLowerCase().indexOf(filterVals.produto)>=0;});
   if(filterVals.local)rows=rows.filter(function(r){return r.it.local.toLowerCase().indexOf(filterVals.local)>=0;});
+  if(filterVals.unidade)rows=rows.filter(function(r){return (r.it.unidade||'').toLowerCase().indexOf(filterVals.unidade)>=0;});
   if(filterVals.controle)rows=rows.filter(function(r){return (r.it.controle||'').toLowerCase().indexOf(filterVals.controle)>=0;});
   if(filterVals.status)rows=rows.filter(function(r){
     var lbl=r.st==='ok'?'conferido':r.st==='div'?'divergente':'pendente';
@@ -634,12 +635,13 @@ function rTab(){
       var av,bv;
       if(sortColIdx===0){av=a.cod;bv=b.cod;}
       else if(sortColIdx===1){av=a.it.produto;bv=b.it.produto;}
-      else if(sortColIdx===2){av=a.it.local;bv=b.it.local;}
-      else if(sortColIdx===3){av=a.it.controle||'';bv=b.it.controle||'';}
-      else if(sortColIdx===4){av=a.it.esperado;bv=b.it.esperado;}
-      else if(sortColIdx===5){av=a.b;bv=b.b;}
-      else if(sortColIdx===6){av=a.d;bv=b.d;}
-      else if(sortColIdx===7){av=a.st;bv=b.st;}
+      else if(sortColIdx===2){av=a.it.unidade||'';bv=b.it.unidade||'';}
+      else if(sortColIdx===3){av=a.it.local;bv=b.it.local;}
+      else if(sortColIdx===4){av=a.it.controle||'';bv=b.it.controle||'';}
+      else if(sortColIdx===5){av=a.it.esperado;bv=b.it.esperado;}
+      else if(sortColIdx===6){av=a.b;bv=b.b;}
+      else if(sortColIdx===7){av=a.d;bv=b.d;}
+      else if(sortColIdx===8){av=a.st;bv=b.st;}
       else{av=a.seps.join(',');bv=b.seps.join(',');}
       if(typeof av==='number')return sortDir*(av-bv);
       return sortDir*(String(av).localeCompare(String(bv),'pt-BR'));
@@ -647,7 +649,7 @@ function rTab(){
   }
 
   // Cabeçalho com sort
-  var cols=['Codigo','Produto','Local','Controle','Esp.','Bip.','Dif.','Status','Separador'];
+  var cols=['Codigo','Produto','UN','Local','Controle','Esp.','Bip.','Dif.','Status','Separador'];
   var thHtml=cols.map(function(lbl,i){
     var ico=sortColIdx===i?(sortDir>0?'\u25B2':'\u25BC'):'\u25B2\u25BC';
     var ac=sortColIdx===i?' style="color:var(--gn)"':'';
@@ -659,6 +661,7 @@ function rTab(){
   var fRow='<tr style="background:var(--cd)">'
     +'<td style="padding:.22rem .3rem"><input style="width:100%;padding:.22rem .35rem;background:var(--bg);border:1px solid var(--br);border-radius:4px;color:var(--tx);font-size:.67rem;outline:none" placeholder="Filtrar..." value="'+filterVals.cod+'" oninput="setFilter(\'cod\',this.value)"></td>'
     +'<td style="padding:.22rem .3rem"><input style="width:100%;padding:.22rem .35rem;background:var(--bg);border:1px solid var(--br);border-radius:4px;color:var(--tx);font-size:.67rem;outline:none" placeholder="Filtrar..." value="'+filterVals.produto+'" oninput="setFilter(\'produto\',this.value)"></td>'
+    +'<td style="padding:.22rem .3rem"><input style="width:100%;padding:.22rem .35rem;background:var(--bg);border:1px solid var(--br);border-radius:4px;color:var(--tx);font-size:.67rem;outline:none" placeholder="UN..." value="'+filterVals.unidade+'" oninput="setFilter(\'unidade\',this.value)"></td>'
     +'<td style="padding:.22rem .3rem"><input style="width:100%;padding:.22rem .35rem;background:var(--bg);border:1px solid var(--br);border-radius:4px;color:var(--tx);font-size:.67rem;outline:none" placeholder="Filtrar..." value="'+filterVals.local+'" oninput="setFilter(\'local\',this.value)"></td>'
     +'<td style="padding:.22rem .3rem"><input style="width:100%;padding:.22rem .35rem;background:var(--bg);border:1px solid var(--br);border-radius:4px;color:var(--tx);font-size:.67rem;outline:none" placeholder="Filtrar..." value="'+filterVals.controle+'" oninput="setFilter(\'controle\',this.value)"></td>'
     +'<td colspan="3" style="padding:.22rem .3rem;font-size:.65rem;color:var(--tm);text-align:center">—</td>'
@@ -675,7 +678,8 @@ function rTab(){
     var ctrlBadge=r.it.controle?'<span style="background:rgba(180,83,9,.12);color:var(--yw);border-radius:5px;font-size:.6rem;font-weight:700;padding:.08rem .3rem">'+r.it.controle+'</span>':'';
     html+='<tr>'
       +'<td class="mono">'+r.cod+'</td>'
-      +'<td style="max-width:210px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+r.it.produto+'">'+r.it.produto+'</td>'
+      +'<td style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+r.it.produto+'">'+r.it.produto+'</td>'
+      +'<td style="font-size:.72rem;color:var(--td);font-weight:600">'+r.it.unidade+'</td>'
       +'<td style="font-size:.7rem;color:var(--td)">'+r.it.local+ncTag+'</td>'
       +'<td>'+ctrlBadge+'</td>'
       +'<td style="text-align:right">'+r.it.esperado+'</td>'
