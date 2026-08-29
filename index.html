@@ -371,7 +371,7 @@ function parsePlanilha(buf){
     var cod=String(Math.round(num));
     if(!cod||cod==='0')continue;
     var ctrl=ict>=0?String(row[ict]||'').trim():'';
-    var itemKey=ctrl?(cod+'|'+ctrl):cod;
+    var itemKey=ctrl?(cod+'~'+ctrl):cod;
     res[itemKey]={
       codOriginal:cod,
       produto:String(row[ip]||'').trim(),
@@ -686,27 +686,29 @@ async function trocarSessao(id){
 
 // Poll
 async function poll(){
-  if(!sid){
-    diagLog('SID nulo — sessao nao carregada');
-    return;
-  }
-  diagLog('Buscando separadores da sessao '+sid+'...');
+  if(!sid){diagLog('ERRO: sid nulo. Sessao nao carregada.');return;}
   try{
-    var seps=await fbG(PATH+'/sessoes/'+sid+'/separadores');
-    if(!seps){
-      diagLog('ERRO: separadores retornou nulo. Verifique a URL do Firebase e o SID.');
-      return;
+    // Ler separadores diretamente
+    var resp=await fetch(DB_URL+PATH+'/sessoes/'+sid+'/separadores.json');
+    if(!resp.ok){diagLog('ERRO HTTP '+resp.status+' ao ler separadores');return;}
+    var seps=await resp.json();
+    
+    if(!seps||seps===null){
+      diagLog('Sessao '+sid.slice(-8)+': sem separadores ainda. Itens: '+Object.keys(itens).length);
+      sepData={};rStats();rLocais();rTab();return;
     }
+    
     sepData=seps;
     var nSeps=Object.keys(seps).length;
     var nBips=0;
     Object.values(seps).forEach(function(s){
       if(s.bipagens)nBips+=Object.keys(s.bipagens).length;
     });
-    diagLog('OK: '+nSeps+' separador(es), '+nBips+' bipagem(ns) encontrada(s).');
     
-    var logRaw=await fbG(PATH+'/sessoes/'+sid+'/log');
+    var logResp=await fetch(DB_URL+PATH+'/sessoes/'+sid+'/log.json');
+    var logRaw=logResp.ok?await logResp.json():null;
     logData=logRaw?Object.values(logRaw).sort(function(a,b){return b.ts-a.ts;}).slice(0,80):[];
+    
     naoId={};
     Object.values(sepData).forEach(function(s){
       if(s.naoBipados)Object.entries(s.naoBipados).forEach(function(e){
@@ -720,9 +722,11 @@ async function poll(){
         naoId[c].cnt+=(v.contagem||1);naoId[c].seps.push(s.nome||'?');
       });
     });
+    
+    diagLog('Sessao '+sid.slice(-8)+': '+nSeps+' sep., '+nBips+' bipagem(ns). Itens: '+Object.keys(itens).length);
     rStats();rLocais();rTab();
   }catch(err){
-    diagLog('EXCECAO no poll: '+err.message);
+    diagLog('EXCECAO: '+err.message);
   }
 }
 
@@ -730,26 +734,34 @@ var _diagEl=null;
 function diagLog(msg){
   if(!_diagEl)_diagEl=document.getElementById('diagBar');
   if(!_diagEl)return;
-  var t=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  var now=new Date();
+  var t=now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0')+':'+now.getSeconds().toString().padStart(2,'0');
   _diagEl.textContent='['+t+'] '+msg;
 }
 
 
 function calcMerged(){
+  // Montar mapa de bipagens — aceitar varios formatos de chave
   var m={};
   Object.values(sepData).forEach(function(s){
     if(!s.bipagens)return;
-    Object.entries(s.bipagens).forEach(function(e){m[e[0]]=(m[e[0]]||0)+(e[1].contagem||0);});
+    Object.entries(s.bipagens).forEach(function(e){
+      var k=e[0], cnt=(e[1].contagem||0);
+      m[k]=(m[k]||0)+cnt;
+      // Normalizar: '|' e '~' sao equivalentes como separador
+      var kn=k.replace(/~/g,'|').replace(/%7C/gi,'|');
+      if(kn!==k)m[kn]=(m[kn]||0)+cnt;
+      // Alias por cod base
+      var base=k.split('|')[0].split('~')[0];
+      if(!m[base])m[base]=0;  // nao sobrescreve se ja existe
+    });
   });
   var conf=0,div=0,pend=0;
   Object.entries(itens).forEach(function(e){
     var key=e[0],it=e[1];
     var b=m[key]||0;
-    // Fallback: tentar pelo cod base (sem controle) para compatibilidade
-    if(b===0){
-      var codBase=it.codOriginal||key.split('|')[0];
-      b=m[codBase]||0;
-    }
+    if(!b){var c=it.codOriginal||key.split('|')[0];b=m[c]||0;}
+    if(!b){var c2=key.replace(/\|/g,'~');b=m[c2]||0;}
     if(b===0)pend++;
     else if(b===it.esperado)conf++;
     else div++;
@@ -1078,7 +1090,7 @@ function exportar(){
     var cod=e[0],it=e[1],b=m[cod]||0,d=b-it.esperado;
     var st=b===0?'Pendente':b===it.esperado?'Conferido':'Divergente';
     var seps=[];Object.entries(sepData).forEach(function(se){if(se[1].bipagens&&se[1].bipagens[cod])seps.push(se[0]);});
-    var expCod=it.codOriginal||cod.split('|')[0];rows.push([expCod,it.produto,it.unidade,it.controle||'',it.local,it.esperado,b>0?b:0,b>0?d:'',st,seps.join(', ')]);
+    var expCod=it.codOriginal||cod.split('~')[0].split('|')[0];rows.push([expCod,it.produto,it.unidade,it.controle||'',it.local,it.esperado,b>0?b:0,b>0?d:'',st,seps.join(', ')]);
   });
   var conf=rows.slice(1).filter(function(r){return r[7]==='Conferido';}).length;
   var tot=rows.length-1;
