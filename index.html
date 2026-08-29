@@ -65,6 +65,21 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .sp-head h2{font-size:.63rem;text-transform:uppercase;letter-spacing:.09em;color:var(--tm);flex:1}
 .sp-new{width:24px;height:24px;border-radius:7px;background:var(--gn);color:#fff;border:none;font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0}
 .sp-new:hover{background:var(--gd)}
+.sp-filter-toggle{height:24px;padding:0 .5rem;border-radius:7px;border:1px solid var(--br);background:var(--cd);color:var(--td);cursor:pointer;font-size:.7rem;font-weight:600;display:flex;align-items:center;gap:.25rem}
+.sp-filter-toggle:hover{border-color:var(--gn);color:var(--gn)}
+.sp-filter-toggle.active{border-color:var(--gn);background:rgba(22,163,74,.08);color:var(--gn)}
+.sp-filters{padding:.5rem .5rem .3rem;border-bottom:1px solid var(--br);display:none;flex-direction:column;gap:.45rem;background:var(--cd)}
+.sp-filters.open{display:flex}
+.sp-filter-lbl{font-size:.6rem;text-transform:uppercase;letter-spacing:.07em;color:var(--tm)}
+.sp-filter-input{width:100%;padding:.38rem .5rem;background:var(--bg);border:1.5px solid var(--br);border-radius:7px;color:var(--tx);font-size:.78rem;outline:none}
+.sp-filter-input:focus{border-color:var(--gn)}
+.sp-filter-row{display:flex;gap:.4rem}
+.sp-filter-row .sp-filter-input{flex:1}
+.sp-filter-clear{padding:.38rem .6rem;background:var(--cd);color:var(--td);border:1px solid var(--br);border-radius:7px;font-size:.72rem;cursor:pointer;white-space:nowrap}
+.sp-filter-clear:hover{border-color:var(--rd);color:var(--rd)}
+.sp-item-del{width:20px;height:20px;border-radius:5px;border:none;background:transparent;color:var(--tm);cursor:pointer;font-size:.75rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;opacity:0;transition:opacity .15s}
+.sp-item:hover .sp-item-del{opacity:1}
+.sp-item-del:hover{background:rgba(220,38,38,.1);color:var(--rd)}
 .sp-list{flex:1;overflow-y:auto;padding:.4rem}
 .sp-group-title{font-size:.63rem;font-weight:800;color:var(--tm);text-transform:uppercase;letter-spacing:.07em;padding:.4rem .4rem .2rem;margin-top:.4rem}
 .sp-group-title:first-child{margin-top:0}
@@ -228,7 +243,29 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     <aside class="sess-panel">
       <div class="sp-head">
         <h2>Sessoes</h2>
+        <button class="sp-filter-toggle" id="spFilterBtn" onclick="toggleSpFilters()" title="Filtros">&#128269; Filtros</button>
         <button class="sp-new" onclick="abrirSetup()" title="Nova sessao">+</button>
+      </div>
+      <div class="sp-filters" id="spFilters">
+        <div>
+          <div class="sp-filter-lbl">Busca por titulo</div>
+          <input class="sp-filter-input" id="spFTitulo" placeholder="Ex: Inventario..." oninput="renderSessoesList()">
+        </div>
+        <div>
+          <div class="sp-filter-lbl">Periodo</div>
+          <div class="sp-filter-row">
+            <input class="sp-filter-input" id="spFDe" type="date" onchange="renderSessoesList()">
+            <input class="sp-filter-input" id="spFAte" type="date" onchange="renderSessoesList()">
+          </div>
+        </div>
+        <div style="display:flex;gap:.35rem">
+          <select class="sp-filter-input" id="spFStatus" onchange="renderSessoesList()" style="flex:1">
+            <option value="">Todos os status</option>
+            <option value="ativo">Somente ativas</option>
+            <option value="encerrado">Somente encerradas</option>
+          </select>
+          <button class="sp-filter-clear" onclick="limparSpFiltros()">&#10005; Limpar</button>
+        </div>
       </div>
       <div class="sp-list" id="spList"><p style="font-size:.75rem;color:var(--tm);padding:.5rem">Carregando...</p></div>
     </aside>
@@ -280,7 +317,7 @@ var parsedItens=null;  // last parsed spreadsheet
 // Theme
 function toggleTheme(){
   var h=document.documentElement,dark=h.hasAttribute('data-dark');
-  var ico=dark?'\u{1F319}':'\u2600\uFE0F';
+  var ico=dark?'\uD83C\uDF19':'\u2600';
   if(dark){h.removeAttribute('data-dark');localStorage.setItem('oe-theme','light');}
   else{h.setAttribute('data-dark','');localStorage.setItem('oe-theme','dark');}
   document.querySelectorAll('#themeBtn,#themeBtn2').forEach(function(b){if(b)b.innerHTML=ico;});
@@ -288,7 +325,7 @@ function toggleTheme(){
 if(localStorage.getItem('oe-theme')==='dark'){
   document.documentElement.setAttribute('data-dark','');
   window.addEventListener('load',function(){
-    document.querySelectorAll('#themeBtn,#themeBtn2').forEach(function(b){if(b)b.innerHTML='\u2600\uFE0F';});
+    document.querySelectorAll('#themeBtn,#themeBtn2').forEach(function(b){if(b)b.innerHTML='\u2600';});
   });
 }
 
@@ -482,6 +519,43 @@ function atualizarRcBar(){
 }
 
 var spCollapsed={ativas:false,encerradas:true};
+var spFiltersOpen=false;
+
+function toggleSpFilters(){
+  spFiltersOpen=!spFiltersOpen;
+  document.getElementById('spFilters').classList.toggle('open',spFiltersOpen);
+  document.getElementById('spFilterBtn').classList.toggle('active',spFiltersOpen);
+}
+function limparSpFiltros(){
+  document.getElementById('spFTitulo').value='';
+  document.getElementById('spFDe').value='';
+  document.getElementById('spFAte').value='';
+  document.getElementById('spFStatus').value='';
+  renderSessoesList();
+}
+function getSpFiltros(){
+  return{
+    titulo:(document.getElementById('spFTitulo').value||'').toLowerCase(),
+    de:document.getElementById('spFDe').value,
+    ate:document.getElementById('spFAte').value,
+    status:document.getElementById('spFStatus').value
+  };
+}
+async function excluirSessao(id,e){
+  e.stopPropagation();
+  var info=sessoesList[id]||{};
+  if(!confirm('Excluir sessao: '+info.titulo+'? Nao pode ser desfeita.'))return;
+  await fbP(PATH+'/sessoes/'+id,null);
+  delete sessoesList[id];
+  Object.keys(grupoSessoes).forEach(function(g){
+    grupoSessoes[g]=grupoSessoes[g].filter(function(i){return i!==id;});
+    if(!grupoSessoes[g].length)delete grupoSessoes[g];
+  });
+  if(sid===id){sid=null;itens={};sepData={};logData=[];}
+  if(pollT){clearInterval(pollT);pollT=null;}
+  limparEstadoMon();
+  await carregarListaSessoes();
+}
 
 function toggleSpSection(sec){
   spCollapsed[sec]=!spCollapsed[sec];
@@ -490,17 +564,31 @@ function toggleSpSection(sec){
 
 function renderSessoesList(){
   var list=document.getElementById('spList');
+  var f=getSpFiltros();
 
-  // Separar sess?es ativas e encerradas
+  function passaFiltro(id){
+    var info=sessoesList[id]||{};
+    if(f.titulo&&info.titulo.toLowerCase().indexOf(f.titulo)<0)return false;
+    if(f.status&&info.status!==f.status)return false;
+    if(f.de||f.ate){
+      var dt=info.inicio?new Date(info.inicio):null;
+      if(dt){
+        if(f.de&&dt<new Date(f.de))return false;
+        if(f.ate&&dt>new Date(f.ate+'T23:59:59'))return false;
+      }
+    }
+    return true;
+  }
+
   var ativas=[],encerradas=[];
   Object.keys(grupoSessoes).forEach(function(g){
     grupoSessoes[g].forEach(function(id){
+      if(!passaFiltro(id))return;
       var info=sessoesList[id]||{};
-      if(info.status==='ativo')ativas.push({id:id,info:info,grupo:g});
-      else encerradas.push({id:id,info:info,grupo:g});
+      if(info.status==='ativo')ativas.push({id:id,info:info});
+      else encerradas.push({id:id,info:info});
     });
   });
-  // Ordenar por data decrescente
   var sortFn=function(a,b){return new Date(b.info.inicio||0)-new Date(a.info.inicio||0);};
   ativas.sort(sortFn);encerradas.sort(sortFn);
 
@@ -518,12 +606,12 @@ function renderSessoesList(){
       +'<span class="sp-cnt '+cntCls+'">'+cntN+'a</span>'
       +'<span class="sp-item-date">'+dt+'</span>'
       +'</div>'
-      +'</div></div>';
+      +'</div>'
+      +'<button class="sp-item-del" data-del="'+id+'" title="Excluir sessao">&#128465;</button>'
+      +'</div>';
   }
 
   var html='';
-
-  // Secao: Ativas
   var colAtivas=spCollapsed.ativas;
   html+='<div class="sp-section">';
   html+='<div class="sp-section-hdr'+(colAtivas?' collapsed':'')+'" onclick="toggleSpSection(\'ativas\')">';
@@ -533,14 +621,10 @@ function renderSessoesList(){
   html+='<span class="sp-sec-arrow">&#9660;</span>';
   html+='</div>';
   html+='<div class="sp-section-body'+(colAtivas?' hidden':'')+'">';
-  if(ativas.length){
-    ativas.forEach(function(s){html+=buildItem(s.id,s.info);});
-  }else{
-    html+='<p style="font-size:.72rem;color:var(--tm);padding:.3rem .5rem">Nenhuma sessao ativa.</p>';
-  }
+  if(ativas.length){ativas.forEach(function(s){html+=buildItem(s.id,s.info);});}
+  else html+='<p style="font-size:.72rem;color:var(--tm);padding:.3rem .5rem">Nenhuma.</p>';
   html+='</div></div>';
 
-  // Secao: Encerradas
   var colEnc=spCollapsed.encerradas;
   html+='<div class="sp-section">';
   html+='<div class="sp-section-hdr'+(colEnc?' collapsed':'')+'" onclick="toggleSpSection(\'encerradas\')">';
@@ -550,16 +634,19 @@ function renderSessoesList(){
   html+='<span class="sp-sec-arrow">&#9660;</span>';
   html+='</div>';
   html+='<div class="sp-section-body'+(colEnc?' hidden':'')+'">';
-  if(encerradas.length){
-    encerradas.forEach(function(s){html+=buildItem(s.id,s.info);});
-  }else{
-    html+='<p style="font-size:.72rem;color:var(--tm);padding:.3rem .5rem">Nenhuma sessao encerrada.</p>';
-  }
+  if(encerradas.length){encerradas.forEach(function(s){html+=buildItem(s.id,s.info);});}
+  else html+='<p style="font-size:.72rem;color:var(--tm);padding:.3rem .5rem">Nenhuma.</p>';
   html+='</div></div>';
 
   list.innerHTML=html;
   list.querySelectorAll('.sp-item[data-sid]').forEach(function(el){
-    el.addEventListener('click',function(){trocarSessao(this.getAttribute('data-sid'));});
+    el.addEventListener('click',function(e){
+      if(e.target.closest('[data-del]'))return;
+      trocarSessao(this.getAttribute('data-sid'));
+    });
+  });
+  list.querySelectorAll('[data-del]').forEach(function(btn){
+    btn.addEventListener('click',function(e){excluirSessao(this.getAttribute('data-del'),e);});
   });
 }
 
