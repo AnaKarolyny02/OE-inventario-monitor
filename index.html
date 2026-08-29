@@ -277,7 +277,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     </aside>
     <!-- Main -->
     <div class="main-area">
-      <div id="diagBar" style="font-size:.7rem;color:var(--td);background:var(--cd);border-bottom:1px solid var(--br);padding:.3rem .9rem;font-family:'Consolas',monospace">Aguardando primeiro poll...</div>
+      <div style="display:flex;align-items:center;gap:.5rem;font-size:.7rem;background:var(--cd);border-bottom:1px solid var(--br);padding:.25rem .9rem">
+  <span id="diagBar" style="flex:1;font-family:'Consolas',monospace;color:var(--td)">Aguardando poll...</span>
+  <button onclick="verFirebase()" style="padding:.15rem .5rem;font-size:.68rem;background:rgba(37,99,235,.1);color:#2563EB;border:1px solid rgba(37,99,235,.25);border-radius:5px;cursor:pointer">Ver Firebase</button>
+</div>
       <div class="rc-bar hidden" id="rcBar">
         <span class="rc-info" id="rcInfo"></span>
         <button class="btn btn-cnt" id="rcBtn" onclick="iniciarRecontagem()" style="font-size:.75rem;padding:.35rem .8rem">&#9654; Iniciar Recontagem</button>
@@ -686,48 +689,84 @@ async function trocarSessao(id){
 
 // Poll
 async function poll(){
-  if(!sid){diagLog('ERRO: sid nulo. Sessao nao carregada.');return;}
+  if(!sid){diagLog('sid=null. Nenhuma sessao carregada.');return;}
   try{
-    // Ler separadores diretamente
-    var resp=await fetch(DB_URL+PATH+'/sessoes/'+sid+'/separadores.json');
-    if(!resp.ok){diagLog('ERRO HTTP '+resp.status+' ao ler separadores');return;}
-    var seps=await resp.json();
+    // Ler separadores
+    var url=DB_URL+PATH+'/sessoes/'+sid+'/separadores.json';
+    var resp=await fetch(url);
+    var txt=await resp.text();
     
-    if(!seps||seps===null){
-      diagLog('Sessao '+sid.slice(-8)+': sem separadores ainda. Itens: '+Object.keys(itens).length);
+    if(txt==='null'||!txt){
+      diagLog('['+sid.slice(-6)+'] Sem separadores no Firebase ainda.');
       sepData={};rStats();rLocais();rTab();return;
     }
     
-    sepData=seps;
+    var seps=JSON.parse(txt);
+    sepData=seps||{};
+    
     var nSeps=Object.keys(seps).length;
-    var nBips=0;
-    Object.values(seps).forEach(function(s){
-      if(s.bipagens)nBips+=Object.keys(s.bipagens).length;
+    var totalBips=0;
+    var sepNomes=[];
+    Object.entries(seps).forEach(function(e){
+      var nome2=e[1].nome||e[0];
+      var nb=e[1].bipagens?Object.keys(e[1].bipagens).length:0;
+      totalBips+=nb;
+      sepNomes.push(nome2+'('+nb+'bips)');
     });
     
-    var logResp=await fetch(DB_URL+PATH+'/sessoes/'+sid+'/log.json');
-    var logRaw=logResp.ok?await logResp.json():null;
-    logData=logRaw?Object.values(logRaw).sort(function(a,b){return b.ts-a.ts;}).slice(0,80):[];
+    diagLog('['+sid.slice(-6)+'] '+nSeps+' sep: '+sepNomes.join(', ')+' | Total: '+totalBips+' bips | Itens: '+Object.keys(itens).length);
+    
+    // Log
+    var logUrl=DB_URL+PATH+'/sessoes/'+sid+'/log.json?orderBy="ts"&limitToLast=80';
+    var logResp=await fetch(logUrl);
+    var logTxt=await logResp.text();
+    if(logTxt&&logTxt!=='null'){
+      var logRaw=JSON.parse(logTxt);
+      logData=Object.values(logRaw).sort(function(a,b){return b.ts-a.ts;}).slice(0,80);
+    }else logData=[];
     
     naoId={};
     Object.values(sepData).forEach(function(s){
-      if(s.naoBipados)Object.entries(s.naoBipados).forEach(function(e){
-        var c=e[0],v=e[1];
-        if(!naoId[c])naoId[c]={cnt:0,seps:[]};
-        naoId[c].cnt+=(v.contagem||1);naoId[c].seps.push(s.nome||'?');
-      });
-      if(s.naoPrevistos)Object.entries(s.naoPrevistos).forEach(function(e){
-        var c=e[0],v=e[1];
-        if(!naoId[c])naoId[c]={cnt:0,seps:[],descricao:v.descricao||''};
-        naoId[c].cnt+=(v.contagem||1);naoId[c].seps.push(s.nome||'?');
-      });
+      function addNI(obj){
+        if(!obj)return;
+        Object.entries(obj).forEach(function(e){
+          var c=e[0],v=e[1];
+          if(!naoId[c])naoId[c]={cnt:0,seps:[]};
+          naoId[c].cnt+=(v.contagem||1);
+          naoId[c].seps.push(s.nome||'?');
+        });
+      }
+      addNI(s.naoBipados);addNI(s.naoPrevistos);
     });
     
-    diagLog('Sessao '+sid.slice(-8)+': '+nSeps+' sep., '+nBips+' bipagem(ns). Itens: '+Object.keys(itens).length);
     rStats();rLocais();rTab();
   }catch(err){
-    diagLog('EXCECAO: '+err.message);
+    diagLog('ERRO CRITICO: '+err.message);
+    console.error(err);
   }
+}
+
+
+async function verFirebase(){
+  if(!sid){alert('Nenhuma sessao ativa.');return;}
+  var url=DB_URL+PATH+'/sessoes/'+sid+'/separadores.json';
+  var txt=await (await fetch(url)).text();
+  var data=JSON.parse(txt);
+  if(!data){alert('Firebase retornou NULL para separadores.\nVerifique se a sessao existe e se os separadores ja conectaram.');return;}
+  var msg='=== SEPARADORES NO FIREBASE ===\n';
+  Object.entries(data).forEach(function(e){
+    var sep2=e[1];
+    msg+='\nNome: '+(sep2.nome||e[0]);
+    msg+='\nLocal: '+(sep2.local||'?');
+    msg+='\nStatus: '+(sep2.status||'?');
+    var nb=sep2.bipagens?Object.keys(sep2.bipagens).length:0;
+    msg+='\nBipagens: '+nb;
+    if(sep2.bipagens&&nb>0){
+      msg+='\n  Chaves: '+Object.keys(sep2.bipagens).slice(0,5).join(', ')+(nb>5?'...':'');
+    }
+    msg+='\n';
+  });
+  alert(msg);
 }
 
 var _diagEl=null;
