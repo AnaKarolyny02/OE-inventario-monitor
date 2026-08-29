@@ -685,10 +685,11 @@ async function trocarSessao(id){
 // Poll
 async function poll(){
   if(!sid)return;
-  var d=await fbG(PATH+'/sessoes/'+sid);
-  if(!d)return;
-  sepData=d.separadores||{};
-  logData=d.log?Object.values(d.log).sort(function(a,b){return b.ts-a.ts;}).slice(0,80):[];
+  // Ler separadores e log separadamente (mais eficiente)
+  var seps=await fbG(PATH+'/sessoes/'+sid+'/separadores');
+  sepData=seps||{};
+  var logRaw=await fbG(PATH+'/sessoes/'+sid+'/log');
+  logData=logRaw?Object.values(logRaw).sort(function(a,b){return b.ts-a.ts;}).slice(0,80):[];
   naoId={};
   Object.values(sepData).forEach(function(s){
     if(!s.naoBipados)return;
@@ -697,6 +698,14 @@ async function poll(){
       if(!naoId[c])naoId[c]={cnt:0,seps:[]};
       naoId[c].cnt+=(v.contagem||1);naoId[c].seps.push(s.nome||'?');
     });
+    // Tambem incluir naoPrevistos na contagem de nao identificados
+    if(s.naoPrevistos){
+      Object.entries(s.naoPrevistos).forEach(function(e){
+        var c=e[0],v=e[1];
+        if(!naoId[c])naoId[c]={cnt:0,seps:[],descricao:v.descricao||''};
+        naoId[c].cnt+=(v.contagem||1);naoId[c].seps.push(s.nome||'?');
+      });
+    }
   });
   rStats();rLocais();rTab();
 }
@@ -709,10 +718,33 @@ function calcMerged(){
   });
   var conf=0,div=0,pend=0;
   Object.entries(itens).forEach(function(e){
-    var b=m[e[0]]||0;
-    if(b===0)pend++;else if(b===e[1].esperado)conf++;else div++;
+    var key=e[0],it=e[1];
+    var b=m[key]||0;
+    // Fallback: tentar pelo cod base (sem controle) para compatibilidade
+    if(b===0){
+      var codBase=it.codOriginal||key.split('|')[0];
+      b=m[codBase]||0;
+    }
+    if(b===0)pend++;
+    else if(b===it.esperado)conf++;
+    else div++;
   });
   return{m:m,conf:conf,div:div,pend:pend};
+}
+
+// Buscar contagem de um item específico no sepData (com fallback)
+function getBipCount(key){
+  var it=itens[key];
+  var m={};
+  Object.values(sepData).forEach(function(s){
+    if(s.bipagens&&s.bipagens[key])m[key]=(m[key]||0)+(s.bipagens[key].contagem||0);
+    // Fallback por cod base
+    if(it){
+      var codBase=it.codOriginal||key.split('|')[0];
+      if(s.bipagens&&s.bipagens[codBase])m[key]=(m[key]||0)+(s.bipagens[codBase].contagem||0);
+    }
+  });
+  return m[key]||0;
 }
 
 function rStats(){
