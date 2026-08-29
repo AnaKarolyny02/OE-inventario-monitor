@@ -302,7 +302,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
   <div class="modal-box" onclick="event.stopPropagation()">
     <h2>&#128257; Iniciar Recontagem</h2>
     <p style="font-size:.83rem;color:var(--td)" id="recModalInfo"></p>
-    <div style="background:var(--sf);border-radius:8px;padding:.75rem;font-size:.8rem;color:var(--td);border:1px solid var(--br)" id="recModalStats"></p>
+    <div style="background:var(--sf);border-radius:8px;padding:.75rem;font-size:.8rem;color:var(--td);border:1px solid var(--br)" id="recModalStats"></div>
     <input type="text" class="form-input" id="recTitulo" placeholder="Titulo da recontagem (opcional)">
     <div class="modal-btns">
       <button class="btn btn-s" onclick="fecharModal()">Cancelar</button>
@@ -310,7 +310,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     </div>
   </div>
 </div>
-<script>
+<scrip
 
 var DB_URL='https://inventarium-43347-default-rtdb.firebaseio.com', PATH='/oe_inventario';
 var sid=null, itens={}, sepData={}, logData=[], naoId={}, tab='all', titulo='', inicio='', pollT=null;
@@ -428,6 +428,7 @@ async function iniciar(){
   var gid='G'+Date.now();
   var info={titulo:t,inicio:now.toISOString(),status:'ativo',totalItens:Object.keys(parsedItens).length,
     locais:locaisUnicos(parsedItens),contagem:1,grupoId:gid};
+  grupoId=gid;  // setar grupoId imediatamente
   var ok1=await fbP(PATH+'/sessoes/'+newId+'/info',info);
   var ok2=await fbP(PATH+'/sessoes/'+newId+'/itens',parsedItens);
   var ok3=await fbP(PATH+'/sessao_ativa',newId);
@@ -1066,25 +1067,42 @@ async function rCmp(c){
 
 // Recontagem
 function iniciarRecontagem(){
-  var idsGrupo=grupoSessoes[grupoId]||[sid];
-  var maxCont=0;
-  idsGrupo.forEach(function(id){var info=sessoesList[id]||{};maxCont=Math.max(maxCont,info.contagem||1);});
-  if(maxCont>=3){alert('Numero maximo de 3 recontagens atingido.');return;}
-  var proxLabel=['1a','2a','3a'][maxCont]||((maxCont+1)+'a');
-  document.getElementById('recModalInfo').textContent='Sera criada a '+proxLabel+' Contagem do inventario: '+titulo;
-  var c=calcMerged();
-  document.getElementById('recModalStats').innerHTML=
-    'Situacao atual: <strong>'+c.conf+'</strong> conferidos &bull; <strong>'+c.div+'</strong> divergentes &bull; <strong>'+c.pend+'</strong> pendentes'
-    +'<br>Acuracia: <strong>'+Math.round(c.conf/Object.keys(itens).length*100)+'%</strong>';
-  document.getElementById('recTitulo').value=titulo+' ('+proxLabel+' Cont.)';
-  document.getElementById('modalRec').style.display='flex';
+  try{
+    // Calcular numero atual de contagens deste grupo
+    var idsGrupo=(grupoId&&grupoSessoes[grupoId])||[sid];
+    var maxCont=0;
+    idsGrupo.forEach(function(id){
+      var info=sessoesList[id]||{};
+      maxCont=Math.max(maxCont,info.contagem||1);
+    });
+    if(maxCont>=3){alert('Numero maximo de 3 recontagens atingido.');return;}
+    var proxLabel=['1a','2a','3a'][maxCont]||((maxCont+1)+'a');
+    var tot=Object.keys(itens).length||1;
+    var c=calcMerged();
+    var acc=Math.round(c.conf/tot*100);
+    // Preencher modal
+    var elInfo=document.getElementById('recModalInfo');
+    var elStats=document.getElementById('recModalStats');
+    var elTit=document.getElementById('recTitulo');
+    var elModal=document.getElementById('modalRec');
+    if(!elModal){alert('Modal nao encontrado. Recarregue a pagina.');return;}
+    if(elInfo)elInfo.textContent='Sera criada a '+proxLabel+' Contagem: '+titulo;
+    if(elStats)elStats.innerHTML='Situacao: <strong>'+c.conf+'</strong> OK &bull; <strong>'+c.div+'</strong> Div. &bull; <strong>'+c.pend+'</strong> Pend. &bull; Acuracia: <strong>'+acc+'%</strong>';
+    if(elTit)elTit.value=titulo+' ('+proxLabel+' Cont.)';
+    elModal.style.display='flex';
+  }catch(err){
+    alert('Erro ao abrir recontagem: '+err.message);
+    console.error(err);
+  }
 }
 
 function fecharModal(){document.getElementById('modalRec').style.display='none';}
 
 async function confirmarRecontagem(){
   fecharModal();
-  var idsGrupo=grupoSessoes[grupoId]||[sid];
+  // Garantir grupoId
+  if(!grupoId){grupoId='G'+Date.now();}
+  var idsGrupo=(grupoSessoes[grupoId])||[sid];
   var maxCont=0;
   idsGrupo.forEach(function(id){var info=sessoesList[id]||{};maxCont=Math.max(maxCont,info.contagem||1);});
   var newCont=maxCont+1;
@@ -1251,6 +1269,8 @@ async function reconectarSessao(id){
   await carregarSessao(id);
   abrirMonitor();
 }
+
+
 
 </script>
 </body>
