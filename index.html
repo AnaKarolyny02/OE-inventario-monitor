@@ -68,6 +68,15 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .sp-list{flex:1;overflow-y:auto;padding:.4rem}
 .sp-group-title{font-size:.63rem;font-weight:800;color:var(--tm);text-transform:uppercase;letter-spacing:.07em;padding:.4rem .4rem .2rem;margin-top:.4rem}
 .sp-group-title:first-child{margin-top:0}
+.sp-section{margin-bottom:.3rem}
+.sp-section-hdr{display:flex;align-items:center;gap:.4rem;padding:.42rem .5rem;cursor:pointer;border-radius:8px;user-select:none;transition:background .15s}
+.sp-section-hdr:hover{background:var(--ch)}
+.sp-section-hdr .sp-sec-title{font-size:.65rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;flex:1}
+.sp-section-hdr .sp-sec-count{font-size:.65rem;font-weight:700;background:var(--cd);border-radius:10px;padding:.08rem .38rem;color:var(--td)}
+.sp-section-hdr .sp-sec-arrow{font-size:.7rem;color:var(--tm);transition:transform .2s;flex-shrink:0}
+.sp-section-hdr.collapsed .sp-sec-arrow{transform:rotate(-90deg)}
+.sp-section-body{overflow:hidden;transition:max-height .25s ease}
+.sp-section-body.hidden{display:none}
 .sp-item{display:flex;align-items:center;gap:.4rem;padding:.5rem .6rem;border-radius:9px;cursor:pointer;border:1.5px solid transparent;transition:all .15s;margin-bottom:.25rem;background:var(--bg)}
 .sp-item:hover{border-color:var(--br);background:var(--cd)}
 .sp-item.active{border-color:var(--gn);background:var(--ch)}
@@ -472,42 +481,83 @@ function atualizarRcBar(){
   }
 }
 
+var spCollapsed={ativas:false,encerradas:true};
+
+function toggleSpSection(sec){
+  spCollapsed[sec]=!spCollapsed[sec];
+  renderSessoesList();
+}
+
 function renderSessoesList(){
   var list=document.getElementById('spList');
-  var grupos=Object.keys(grupoSessoes).sort(function(a,b){
-    var aT=Math.max.apply(null,grupoSessoes[a].map(function(id){return new Date((sessoesList[id]&&sessoesList[id].inicio)||0).getTime();}));
-    var bT=Math.max.apply(null,grupoSessoes[b].map(function(id){return new Date((sessoesList[id]&&sessoesList[id].inicio)||0).getTime();}));
-    return bT-aT;
-  });
-  var html='';
-  grupos.forEach(function(g){
-    var ids=grupoSessoes[g].slice().sort(function(a,b){return (sessoesList[a].contagem||1)-(sessoesList[b].contagem||1);});
-    var base=sessoesList[ids[0]]||{};
-    html+='<div class="sp-group-title">'+base.titulo+'</div>';
-    ids.forEach(function(id){
+
+  // Separar sess?es ativas e encerradas
+  var ativas=[],encerradas=[];
+  Object.keys(grupoSessoes).forEach(function(g){
+    grupoSessoes[g].forEach(function(id){
       var info=sessoesList[id]||{};
-      var cntN=info.contagem||1;
-      var cntCls=['c1','c2','c3'][cntN-1]||'c1';
-      var cntL=cntN+'a Cont.';
-      var isAtivo=info.status==='ativo';
-      var isActive=id===sid;
-      var dt=info.inicio?new Date(info.inicio).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'-';
-      var ac=isActive?' active':'';
-      var statusTxt=isAtivo?'? Ativo':'? Encerrado';
-      html+='<div class="sp-item'+ac+'" data-sid="'+id+'">';
-      html+='<div class="sp-dot '+(isAtivo?'ativo':'enc')+'"></div>';
-      html+='<div class="sp-item-body">';
-      html+='<div class="sp-item-title">'+statusTxt+'</div>';
-      html+='<div class="sp-item-meta">';
-      html+='<span class="sp-cnt '+cntCls+'">'+cntL+'</span>';
-      html+='<span class="sp-item-date">'+dt+'</span>';
-      html+='</div>';
-      html+='</div></div>';
+      if(info.status==='ativo')ativas.push({id:id,info:info,grupo:g});
+      else encerradas.push({id:id,info:info,grupo:g});
     });
   });
-  if(!html)html='<p style="font-size:.75rem;color:var(--tm);padding:.5rem">Nenhuma sessao.</p>';
+  // Ordenar por data decrescente
+  var sortFn=function(a,b){return new Date(b.info.inicio||0)-new Date(a.info.inicio||0);};
+  ativas.sort(sortFn);encerradas.sort(sortFn);
+
+  function buildItem(id,info){
+    var cntN=info.contagem||1;
+    var cntCls=['c1','c2','c3'][cntN-1]||'c1';
+    var isActive=id===sid;
+    var isAtivo=info.status==='ativo';
+    var dt=info.inicio?new Date(info.inicio).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'-';
+    return '<div class="sp-item'+(isActive?' active':'')+'" data-sid="'+id+'">'
+      +'<div class="sp-dot '+(isAtivo?'ativo':'enc')+'"></div>'
+      +'<div class="sp-item-body">'
+      +'<div class="sp-item-title" style="font-size:.76rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+info.titulo+'</div>'
+      +'<div class="sp-item-meta">'
+      +'<span class="sp-cnt '+cntCls+'">'+cntN+'a</span>'
+      +'<span class="sp-item-date">'+dt+'</span>'
+      +'</div>'
+      +'</div></div>';
+  }
+
+  var html='';
+
+  // Secao: Ativas
+  var colAtivas=spCollapsed.ativas;
+  html+='<div class="sp-section">';
+  html+='<div class="sp-section-hdr'+(colAtivas?' collapsed':'')+'" onclick="toggleSpSection(\'ativas\')">';
+  html+='<span style="width:8px;height:8px;border-radius:50%;background:var(--gn);animation:'+(ativas.length?'pulse 1.5s infinite':'none')+';flex-shrink:0;display:inline-block"></span>';
+  html+='<span class="sp-sec-title" style="color:var(--gn)">Ativas</span>';
+  html+='<span class="sp-sec-count">'+ativas.length+'</span>';
+  html+='<span class="sp-sec-arrow">&#9660;</span>';
+  html+='</div>';
+  html+='<div class="sp-section-body'+(colAtivas?' hidden':'')+'">';
+  if(ativas.length){
+    ativas.forEach(function(s){html+=buildItem(s.id,s.info);});
+  }else{
+    html+='<p style="font-size:.72rem;color:var(--tm);padding:.3rem .5rem">Nenhuma sessao ativa.</p>';
+  }
+  html+='</div></div>';
+
+  // Secao: Encerradas
+  var colEnc=spCollapsed.encerradas;
+  html+='<div class="sp-section">';
+  html+='<div class="sp-section-hdr'+(colEnc?' collapsed':'')+'" onclick="toggleSpSection(\'encerradas\')">';
+  html+='<span style="width:8px;height:8px;border-radius:50%;background:var(--tm);flex-shrink:0;display:inline-block"></span>';
+  html+='<span class="sp-sec-title" style="color:var(--td)">Encerradas</span>';
+  html+='<span class="sp-sec-count">'+encerradas.length+'</span>';
+  html+='<span class="sp-sec-arrow">&#9660;</span>';
+  html+='</div>';
+  html+='<div class="sp-section-body'+(colEnc?' hidden':'')+'">';
+  if(encerradas.length){
+    encerradas.forEach(function(s){html+=buildItem(s.id,s.info);});
+  }else{
+    html+='<p style="font-size:.72rem;color:var(--tm);padding:.3rem .5rem">Nenhuma sessao encerrada.</p>';
+  }
+  html+='</div></div>';
+
   list.innerHTML=html;
-  // Adicionar listeners via JS em vez de onclick inline (evita problemas de escape)
   list.querySelectorAll('.sp-item[data-sid]').forEach(function(el){
     el.addEventListener('click',function(){trocarSessao(this.getAttribute('data-sid'));});
   });
