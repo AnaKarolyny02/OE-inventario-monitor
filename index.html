@@ -12,6 +12,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Oliveira Energia - Monitor de Inventario</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+
 <style>
 :root{--bg:#FFF;--sf:#F4F9F6;--cd:#EBF5EF;--ch:#DDF0E5;--br:#C3DECE;--gn:#16A34A;--gd:#15803D;--rd:#DC2626;--yw:#B45309;--tx:#0E1F17;--td:#4A7A5A;--tm:#7A9F8A;--sh:0 1px 4px rgba(0,30,15,.1)}
 [data-dark]{--bg:#071410;--sf:#0D1F19;--cd:#132A20;--ch:#1A3629;--br:#1E3A28;--gn:#2ECC71;--gd:#1A9E52;--rd:#E74C3C;--yw:#F1C40F;--tx:#ECF0F1;--td:#7FB898;--tm:#4A7A5A;--sh:0 1px 4px rgba(0,0,0,.4)}
@@ -312,6 +314,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 </div>
 <scrip
 
+<script>
 var DB_URL='https://inventarium-43347-default-rtdb.firebaseio.com', PATH='/oe_inventario';
 var sid=null, itens={}, sepData={}, logData=[], naoId={}, tab='all', titulo='', inicio='', pollT=null;
 var sessoesList={};  // {id: info}
@@ -478,27 +481,37 @@ function abrirMonitor(){
 
 // Load all sessions for panel
 async function carregarListaSessoes(){
-  var todas=await fbG(PATH+'/sessoes');
-  if(!todas){document.getElementById('spList').innerHTML='<p style="font-size:.75rem;color:var(--tm);padding:.5rem">Nenhuma sessao encontrada.</p>';return;}
-  sessoesList={};grupoSessoes={};
-  var infos=[];
-  for(var id in todas){
-    var info=todas[id]&&todas[id].info;
-    if(!info)continue;
-    sessoesList[id]=info;info._id=id;
-    var g=info.grupoId||id;
-    if(!grupoSessoes[g])grupoSessoes[g]=[];
-    grupoSessoes[g].push(id);
-    infos.push({id:id,info:info});
-  }
-  renderSessoesList();
-  // Show comparison tab if same group has multiple contagens
-  if(grupoId&&grupoSessoes[grupoId]&&grupoSessoes[grupoId].length>1)
-    document.getElementById('tCmp').style.display='';
-  else
-    document.getElementById('tCmp').style.display='none';
-  // Show recount bar
-  atualizarRcBar();
+  try{
+    // Shallow: pegar so as chaves
+    var resp=await fetch(DB_URL+PATH+'/sessoes.json?shallow=true');
+    if(!resp.ok){document.getElementById('spList').innerHTML='<p style="font-size:.75rem;color:var(--tm);padding:.5rem">Erro ao carregar sessoes.</p>';return;}
+    var chaves=await resp.json();
+    if(!chaves){document.getElementById('spList').innerHTML='<p style="font-size:.75rem;color:var(--tm);padding:.5rem">Nenhuma sessao.</p>';return;}
+    var ids=Object.keys(chaves);
+    sessoesList={};grupoSessoes={};
+    // Ler info de cada sessao em paralelo
+    await Promise.all(ids.map(async function(id){
+      try{
+        var r2=await fetch(DB_URL+PATH+'/sessoes/'+id+'/info.json');
+        if(!r2.ok)return;
+        var info=await r2.json();
+        if(!info)return;
+        info._id=id;
+        sessoesList[id]=info;
+        var g=info.grupoId||id;
+        if(!grupoSessoes[g])grupoSessoes[g]=[];
+        grupoSessoes[g].push(id);
+      }catch(e){}
+    }));
+    renderSessoesList();
+    // Show comparison tab if same group has multiple contagens
+    if(grupoId&&grupoSessoes[grupoId]&&grupoSessoes[grupoId].length>1)
+      document.getElementById('tCmp').style.display='';
+    else
+      document.getElementById('tCmp').style.display='none';
+    // Show recount bar
+    atualizarRcBar();
+  }catch(e){console.error('carregarListaSessoes:',e);}
 }
 
 function atualizarRcBar(){
@@ -781,7 +794,7 @@ function diagLog(msg){
 
 
 function calcMerged(){
-  // Montar mapa de bipagens — aceitar varios formatos de chave
+  // Montar mapa de bipagens ? aceitar varios formatos de chave
   var m={};
   Object.values(sepData).forEach(function(s){
     if(!s.bipagens)return;
@@ -809,7 +822,7 @@ function calcMerged(){
   return{m:m,conf:conf,div:div,pend:pend};
 }
 
-// Buscar contagem de um item específico no sepData (com fallback)
+// Buscar contagem de um item espec?fico no sepData (com fallback)
 function getBipCount(key){
   var it=itens[key];
   var m={};
@@ -1228,40 +1241,52 @@ async function carregarMaisRecenteAtiva(){
 })();
 
 async function carregarSessoesAtivas(){
-  var todas=await fbG(PATH+'/sessoes');
-  if(!todas)return;
-  var ativas=[];
-  Object.keys(todas).forEach(function(id){
-    var s=todas[id];
-    if(s&&s.info&&s.info.status==='ativo'){
-      ativas.push({id:id,info:s.info,separadores:s.separadores||{}});
-    }
-  });
-  ativas.sort(function(a,b){
-    return new Date(b.info.inicio||0)-new Date(a.info.inicio||0);
-  });
-  var container=document.getElementById('sessAtivas');
-  var list=document.getElementById('sessAtivasList');
-  var divider=document.getElementById('dividerNova');
-  if(!ativas.length){container.style.display='none';divider.style.display='none';return;}
-  container.style.display='';divider.style.display='';
-  list.innerHTML=ativas.map(function(s){
-    var info=s.info;
-    var cntNum=info.contagem||1;
-    var cntSufixos=['1a','2a','3a'];
-    var cntLabel=(cntSufixos[cntNum-1]||cntNum+'a')+' Contagem';
-    var dt=info.inicio?new Date(info.inicio).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'-';
-    var nSeps=Object.keys(s.separadores).length;
-    var sepStr=nSeps>0?(nSeps+(nSeps>1?' separadores ativos':' separador ativo')):'Aguardando separadores';
-    return '<div class="sa-card">'
-      +'<div class="sa-dot"></div>'
-      +'<div class="sa-info">'
-      +'<div class="sa-title">'+info.titulo+'</div>'
-      +'<div class="sa-sub">'+cntLabel+' &bull; Inicio: '+dt+' &bull; '+(info.totalItens||0)+' itens &bull; '+sepStr+'</div>'
-      +'</div>'
-      +'<button class="sa-btn" onclick="reconectarSessao(\''+s.id+'\')">Abrir</button>'
-      +'</div>';
-  }).join('');
+  try{
+    var resp=await fetch(DB_URL+PATH+'/sessoes.json?shallow=true');
+    if(!resp.ok)return;
+    var chaves=await resp.json();
+    if(!chaves)return;
+    var ids=Object.keys(chaves);
+    var ativas=[];
+    await Promise.all(ids.map(async function(id){
+      try{
+        var r2=await fetch(DB_URL+PATH+'/sessoes/'+id+'/info.json');
+        if(!r2.ok)return;
+        var info=await r2.json();
+        if(info&&info.status==='ativo'){
+          var r3=await fetch(DB_URL+PATH+'/sessoes/'+id+'/separadores.json');
+          var seps=r3.ok?await r3.json():{};
+          ativas.push({id:id,info:info,separadores:seps||{}});
+        }
+      }catch(e){}
+    }));
+    ativas.sort(function(a,b){return new Date(b.info.inicio||0)-new Date(a.info.inicio||0);});
+    var container=document.getElementById('sessAtivas');
+    var list=document.getElementById('sessAtivasList');
+    var divider=document.getElementById('dividerNova');
+    if(!ativas.length){if(container)container.style.display='none';if(divider)divider.style.display='none';return;}
+    if(container)container.style.display='';if(divider)divider.style.display='';
+    var cnts=['1a','2a','3a'];
+    if(list)list.innerHTML=ativas.map(function(s){
+      var info=s.info;
+      var cntN=info.contagem||1;
+      var cntL=cnts[cntN-1]||cntN+'a';
+      var dt=info.inicio?new Date(info.inicio).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'-';
+      var nSeps=Object.keys(s.separadores||{}).length;
+      var sepStr=nSeps>0?(nSeps+' separador'+(nSeps>1?'es ativos':' ativo')):'Aguardando separadores';
+      return '<div class="sa-card">'
+        +'<div class="sa-dot"></div>'
+        +'<div class="sa-info">'
+        +'<div class="sa-title">'+info.titulo+'</div>'
+        +'<div class="sa-sub">'+cntL+' Contagem &bull; Inicio: '+dt+' &bull; '+(info.totalItens||0)+' itens &bull; '+sepStr+'</div>'
+        +'</div>'
+        +'<button class="sa-btn" data-sid="'+s.id+'">Abrir</button>'
+        +'</div>';
+    }).join('');
+    if(list)list.querySelectorAll('.sa-btn[data-sid]').forEach(function(btn){
+      btn.addEventListener('click',function(){reconectarSessao(this.getAttribute('data-sid'));});
+    });
+  }catch(e){console.error('carregarSessoesAtivas:',e);}
 }
 
 
