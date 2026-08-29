@@ -235,6 +235,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     <div class="hbtns">
       <button onclick="toggleTheme()" id="themeBtn2" class="icon-btn">&#127769;</button>
       <button class="btn btn-s" onclick="exportar()" style="font-size:.78rem;padding:.4rem .8rem">&#128229; Exportar</button>
+      <button class="btn btn-s" onclick="poll()" style="font-size:.78rem;padding:.4rem .8rem">&#8635; Atualizar</button>
       <button class="btn btn-d" onclick="encerrar()" style="font-size:.78rem;padding:.4rem .8rem">&#9209; Encerrar</button>
     </div>
   </header>
@@ -276,6 +277,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     </aside>
     <!-- Main -->
     <div class="main-area">
+      <div id="diagBar" style="font-size:.7rem;color:var(--td);background:var(--cd);border-bottom:1px solid var(--br);padding:.3rem .9rem;font-family:'Consolas',monospace">Aguardando primeiro poll...</div>
       <div class="rc-bar hidden" id="rcBar">
         <span class="rc-info" id="rcInfo"></span>
         <button class="btn btn-cnt" id="rcBtn" onclick="iniciarRecontagem()" style="font-size:.75rem;padding:.35rem .8rem">&#9654; Iniciar Recontagem</button>
@@ -684,31 +686,54 @@ async function trocarSessao(id){
 
 // Poll
 async function poll(){
-  if(!sid)return;
-  // Ler separadores e log separadamente (mais eficiente)
-  var seps=await fbG(PATH+'/sessoes/'+sid+'/separadores');
-  sepData=seps||{};
-  var logRaw=await fbG(PATH+'/sessoes/'+sid+'/log');
-  logData=logRaw?Object.values(logRaw).sort(function(a,b){return b.ts-a.ts;}).slice(0,80):[];
-  naoId={};
-  Object.values(sepData).forEach(function(s){
-    if(!s.naoBipados)return;
-    Object.entries(s.naoBipados).forEach(function(e){
-      var c=e[0],v=e[1];
-      if(!naoId[c])naoId[c]={cnt:0,seps:[]};
-      naoId[c].cnt+=(v.contagem||1);naoId[c].seps.push(s.nome||'?');
+  if(!sid){
+    diagLog('SID nulo — sessao nao carregada');
+    return;
+  }
+  diagLog('Buscando separadores da sessao '+sid+'...');
+  try{
+    var seps=await fbG(PATH+'/sessoes/'+sid+'/separadores');
+    if(!seps){
+      diagLog('ERRO: separadores retornou nulo. Verifique a URL do Firebase e o SID.');
+      return;
+    }
+    sepData=seps;
+    var nSeps=Object.keys(seps).length;
+    var nBips=0;
+    Object.values(seps).forEach(function(s){
+      if(s.bipagens)nBips+=Object.keys(s.bipagens).length;
     });
-    // Tambem incluir naoPrevistos na contagem de nao identificados
-    if(s.naoPrevistos){
-      Object.entries(s.naoPrevistos).forEach(function(e){
+    diagLog('OK: '+nSeps+' separador(es), '+nBips+' bipagem(ns) encontrada(s).');
+    
+    var logRaw=await fbG(PATH+'/sessoes/'+sid+'/log');
+    logData=logRaw?Object.values(logRaw).sort(function(a,b){return b.ts-a.ts;}).slice(0,80):[];
+    naoId={};
+    Object.values(sepData).forEach(function(s){
+      if(s.naoBipados)Object.entries(s.naoBipados).forEach(function(e){
+        var c=e[0],v=e[1];
+        if(!naoId[c])naoId[c]={cnt:0,seps:[]};
+        naoId[c].cnt+=(v.contagem||1);naoId[c].seps.push(s.nome||'?');
+      });
+      if(s.naoPrevistos)Object.entries(s.naoPrevistos).forEach(function(e){
         var c=e[0],v=e[1];
         if(!naoId[c])naoId[c]={cnt:0,seps:[],descricao:v.descricao||''};
         naoId[c].cnt+=(v.contagem||1);naoId[c].seps.push(s.nome||'?');
       });
-    }
-  });
-  rStats();rLocais();rTab();
+    });
+    rStats();rLocais();rTab();
+  }catch(err){
+    diagLog('EXCECAO no poll: '+err.message);
+  }
 }
+
+var _diagEl=null;
+function diagLog(msg){
+  if(!_diagEl)_diagEl=document.getElementById('diagBar');
+  if(!_diagEl)return;
+  var t=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  _diagEl.textContent='['+t+'] '+msg;
+}
+
 
 function calcMerged(){
   var m={};
