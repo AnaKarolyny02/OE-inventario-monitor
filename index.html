@@ -321,12 +321,15 @@ function parsePlanilha(buf){
     if(isNaN(num))continue;
     var cod=String(Math.round(num));
     if(!cod||cod==='0')continue;
-    res[cod]={
+    var ctrl=ict>=0?String(row[ict]||'').trim():'';
+    var itemKey=ctrl?(cod+'|'+ctrl):cod;
+    res[itemKey]={
+      codOriginal:cod,
       produto:String(row[ip]||'').trim(),
       unidade:String(row[iu]||'').trim(),
       esperado:parseFloat(String(row[ie]||'').replace(/,/g,'.'))||0,
       local:String(row[il]||'').trim(),
-      controle:ict>=0?String(row[ict]||'').trim():'',
+      controle:ctrl,
       localPai:ilp>=0?String(row[ilp]||'').trim():''
     };
   }
@@ -702,8 +705,9 @@ function rTab(){
   rows.forEach(function(r){
     var ncTag=r.nc?'<span style="font-size:.58rem;color:var(--yw);margin-left:.2rem">NC</span>':'';
     var ctrlBadge=r.it.controle?'<span style="background:rgba(180,83,9,.12);color:var(--yw);border-radius:5px;font-size:.6rem;font-weight:700;padding:.08rem .3rem">'+r.it.controle+'</span>':'';
+    var codDisp=r.cod.indexOf('|')>=0?r.cod.split('|')[0]:r.cod;
     html+='<tr>'
-      +'<td class="mono">'+r.cod+'</td>'
+      +'<td class="mono">'+codDisp+'</td>'
       +'<td style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+r.it.produto+'">'+r.it.produto+'</td>'
       +'<td style="font-size:.72rem;color:var(--td);font-weight:600">'+r.it.unidade+'</td>'
       +'<td style="font-size:.7rem;color:var(--td)">'+r.it.local+ncTag+'</td>'
@@ -880,7 +884,7 @@ function exportar(){
     var cod=e[0],it=e[1],b=m[cod]||0,d=b-it.esperado;
     var st=b===0?'Pendente':b===it.esperado?'Conferido':'Divergente';
     var seps=[];Object.entries(sepData).forEach(function(se){if(se[1].bipagens&&se[1].bipagens[cod])seps.push(se[0]);});
-    rows.push([cod,it.produto,it.unidade,it.controle||'',it.local,it.esperado,b>0?b:0,b>0?d:'',st,seps.join(', ')]);
+    var expCod=it.codOriginal||cod.split('|')[0];rows.push([expCod,it.produto,it.unidade,it.controle||'',it.local,it.esperado,b>0?b:0,b>0?d:'',st,seps.join(', ')]);
   });
   var conf=rows.slice(1).filter(function(r){return r[7]==='Conferido';}).length;
   var tot=rows.length-1;
