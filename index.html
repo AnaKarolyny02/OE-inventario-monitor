@@ -1240,8 +1240,9 @@ function setTab(t){
     var el=document.getElementById('t'+x.charAt(0).toUpperCase()+x.slice(1));
     if(el)el.classList.toggle('active',x===t);
   });
-  // Relatorio: chamar direto (nao pelo rTab que retorna cedo)
+  // Relatorio e Comparacao: chamar direto (nao pelo rTab que retorna cedo)
   if(t==='rel'){var c=document.getElementById('tabC');if(c)rRel(c);return;}
+  if(t==='cmp'){var c=document.getElementById('tabC');if(c)rCmp(c);return;}
   rTab();
 }
 
@@ -1256,7 +1257,8 @@ function setSort(idx){if(sortColIdx===idx)sortDir*=-1;else{sortColIdx=idx;sortDi
 
 function rTab(){
   var c=document.getElementById('tabC');
-  if(tab==='rel')return;
+  // Nao re-renderizar abas estaticas no poll (evita piscar)
+  if(tab==='rel'||tab==='cmp')return;
   if(tab==='feed'){rFeed(c);return;}
   if(tab==='ni'){rNi(c);return;}
   if(tab==='cmp'){rCmp(c);return;}
@@ -1495,8 +1497,25 @@ async function confirmarRecontagem(){
   var info={titulo:t,inicio:now.toISOString(),status:'ativo',totalItens:Object.keys(itens).length,
     locais:locaisUnicos(),contagem:newCont,grupoId:grupoId};
   if(pollT){clearInterval(pollT);pollT=null;}
+  // Filtrar apenas divergentes, pendentes e NC para recontagem
+  var m=calcMerged().m;
+  var itensRec={};
+  Object.entries(itens).forEach(function(e){
+    var key=e[0],it=e[1],b=m[key]||0;
+    var temNC=false;
+    Object.values(sepData).forEach(function(s){
+      if(s.bipagens&&s.bipagens[key]&&s.bipagens[key].naoConformidade)temNC=true;
+    });
+    // Incluir: nao contado, divergente ou NC
+    if(b===0||b!==it.esperado||temNC)itensRec[key]=it;
+  });
+  var nRec=Object.keys(itensRec).length;
+  if(nRec===0){alert('Todos os itens conferidos. Recontagem nao necessaria!');return;}
+  info.totalItens=nRec;
+  info.locais=locaisUnicos(itensRec);
+  diagLog('Recontagem: '+nRec+' itens (divergentes/pendentes/NC)');
   await fbP(PATH+'/sessoes/'+newId+'/info',info);
-  await fbP(PATH+'/sessoes/'+newId+'/itens',itens);
+  await fbP(PATH+'/sessoes/'+newId+'/itens',itensRec);
   await fbP(PATH+'/sessao_ativa',newId);
   sid=newId;titulo=t;inicio=now.toLocaleString('pt-BR');contagem=newCont;
   sepData={};logData=[];naoId={};
