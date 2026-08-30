@@ -740,7 +740,9 @@ async function carregarListaSessoes(){
 
 function atualizarRcBar(){
   var rcBar=document.getElementById('rcBar'),rcInfo=document.getElementById('rcInfo'),rcBtn=document.getElementById('rcBtn');
-  if(!grupoId){rcBar.classList.add('hidden');return;}
+  // Mostrar recontagem mesmo com sessao encerrada
+  if(!grupoId&&!sid){rcBar.classList.add('hidden');return;}
+  if(!grupoId)grupoId='G'+sid;  // criar grupoId temporario se nao existir
   var idsGrupo=grupoSessoes[grupoId]||[sid];
   var maxCont=0;
   idsGrupo.forEach(function(id){var info=sessoesList[id]||{};maxCont=Math.max(maxCont,info.contagem||1);});
@@ -1113,6 +1115,8 @@ function setSort(idx){if(sortColIdx===idx)sortDir*=-1;else{sortColIdx=idx;sortDi
 
 function rTab(){
   var c=document.getElementById('tabC');
+  // Nao re-renderizar aba de relatorio (poll nao deve apagar selecao de checkboxes)
+  if(tab==='rel')return;
   if(tab==='feed'){rFeed(c);return;}
   if(tab==='ni'){rNi(c);return;}
   if(tab==='cmp'){rCmp(c);return;}
@@ -1402,7 +1406,9 @@ async function encerrar(){
   document.getElementById('hBadge').className='bdg bdg-off';
   document.getElementById('hBadge').textContent='\u25a0 ENCERRADO';
   await carregarListaSessoes();
-  alert('Sessao encerrada. Clique em Relatorio para emitir.');
+  // Manter botao de recontagem visivel mesmo encerrado
+  atualizarRcBar();
+  alert('Sessao encerrada. Voce ainda pode iniciar recontagem se necessario.');
 }
 
 function exportar(){
