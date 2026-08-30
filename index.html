@@ -957,7 +957,7 @@ async function poll(){
     diagLog('['+sid.slice(-6)+'] '+nSeps+' sep: '+sepNomes.join(', ')+' | Total: '+totalBips+' bips | Itens: '+Object.keys(itens).length);
     
     // Log
-    var logUrl=DB_URL+PATH+'/sessoes/'+sid+'/log.json?orderBy="ts"&limitToLast=80';
+    var logUrl=DB_URL+PATH+'/sessoes/'+sid+'/log.json';
     var logResp=await fetch(logUrl);
     var logTxt=await logResp.text();
     if(logTxt&&logTxt!=='null'){
@@ -1101,6 +1101,9 @@ function setTab(t){
     var el=document.getElementById('t'+x.charAt(0).toUpperCase()+x.slice(1));
     if(el)el.classList.toggle('active',x===t);
   });
+  var c=document.getElementById('tabC');
+  // Relatorio: renderizar so quando usuario clica na aba (nao no poll)
+  if(t==='rel'){if(c)rRel(c);return;}
   rTab();
 }
 
@@ -1249,7 +1252,7 @@ function rFeed(c){
       +'<span class="fi-t">'+(e.hora||'')+'</span>'
       +'<span class="fi-sep">'+(e.separador||'')+'</span>'
       +'<span class="fi-loc">'+(e.local||'')+'</span>'
-      +'<span class="fi-prod">'+(e.produto||e.cod)+'</span></div>';
+      +'<span class="fi-prod">'+(e.produto||e.cod||'(sem descricao)')+'</span></div>';
   }).join('')+'</div>';
 }
 
