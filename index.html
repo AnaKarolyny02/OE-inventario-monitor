@@ -164,7 +164,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 <body>
 <!-- Setup -->
 <div id="setup" style="display:flex">
-  <div class="sess-ativas" id="sessAtivas" style="display:none">
+  <div class="sess-ativas" id="sessAtivas" style="display:block">
     <h3>&#128994; Sessoes em andamento</h3>
     <div id="sessAtivasList"></div>
   </div>
@@ -827,78 +827,90 @@ async function uploadCatalogo(){
 
 // ?? Sessoes ativas e encerradas na tela inicial ???????????
 async function carregarSessoesAtivas(){
+  var container=document.getElementById('sessAtivas');
+  var list=document.getElementById('sessAtivasList');
+  var encDiv=document.getElementById('sessEncDiv');
+  var encList=document.getElementById('sessEncList');
+  if(list)list.innerHTML='<p style="font-size:.75rem;color:var(--tm)">Buscando sessoes...</p>';
+  if(container)container.style.display='';
+
   try{
     var resp=await fetch(DB_URL+PATH+'/sessoes.json?shallow=true');
-    if(!resp.ok)return;
+    if(!resp.ok){
+      if(list)list.innerHTML='<p style="color:var(--rd);font-size:.78rem">Erro ao buscar sessoes.</p>';
+      return;
+    }
     var chaves=await resp.json();
-    if(!chaves)return;
-    var ids=Object.keys(chaves);
-    var ativas=[],encerradas=[];
-    await Promise.all(ids.map(async function(id){
+    if(!chaves||!Object.keys(chaves).length){
+      if(list)list.innerHTML='<p style="font-size:.75rem;color:var(--tm)">Nenhuma sessao encontrada.</p>';
+      return;
+    }
+
+    var todas=[];
+    await Promise.all(Object.keys(chaves).map(async function(id){
       try{
         var r2=await fetch(DB_URL+PATH+'/sessoes/'+id+'/info.json');
         if(!r2.ok)return;
-        var info=await r2.json();if(!info)return;
-        var st=info.status||'ativo';
-        if(st==='ativo'){
-          var r3=await fetch(DB_URL+PATH+'/sessoes/'+id+'/separadores.json');
-          var seps=r3.ok?await r3.json():{};
-          ativas.push({id:id,info:info,separadores:seps||{}});
-        }else{
-          encerradas.push({id:id,info:info});
-        }
+        var info=await r2.json();
+        if(info)todas.push({id:id,info:info});
       }catch(e){}
     }));
-    var sortFn=function(a,b){return new Date(b.info.inicio||0)-new Date(a.info.inicio||0);};
-    ativas.sort(sortFn);encerradas.sort(sortFn);
 
-    var container=document.getElementById('sessAtivas');
-    var list=document.getElementById('sessAtivasList');
-    var divider=document.getElementById('dividerNova');
-    var encDiv=document.getElementById('sessEncDiv');
-    var encList=document.getElementById('sessEncList');
+    todas.sort(function(a,b){return new Date(b.info.inicio||0)-new Date(a.info.inicio||0);});
+
     var cnts=['1a','2a','3a'];
+    var ativas=todas.filter(function(s){return (s.info.status||'ativo')==='ativo';});
+    var encerradas=todas.filter(function(s){return (s.info.status||'ativo')!=='ativo';});
 
-    if(ativas.length){
-      if(container)container.style.display='';
-      if(divider)divider.style.display='';
-      if(list)list.innerHTML=ativas.map(function(s){
-        var info=s.info;
-        var cntL=cnts[(info.contagem||1)-1]||info.contagem+'a';
-        var dt=info.inicio?new Date(info.inicio).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'-';
-        var nSeps=Object.keys(s.separadores||{}).length;
-        var sepStr=nSeps>0?(nSeps+' sep. ativo'+(nSeps>1?'s':'')):'Aguardando separadores';
-        return '<div class="sa-card"><div class="sa-dot"></div>'
-          +'<div class="sa-info"><div class="sa-title">'+info.titulo+'</div>'
-          +'<div class="sa-sub">'+cntL+' &bull; '+dt+' &bull; '+(info.totalItens||0)+' itens &bull; '+sepStr+'</div>'
-          +'</div><button class="sa-btn" data-sid="'+s.id+'">Abrir</button></div>';
-      }).join('');
-      if(list)list.querySelectorAll('.sa-btn[data-sid]').forEach(function(btn){
-        btn.addEventListener('click',function(){reconectarSessao(this.getAttribute('data-sid'));});
-      });
+    function buildCard(s,isEnc){
+      var info=s.info;
+      var cntL=cnts[(info.contagem||1)-1]||info.contagem+'a';
+      var dt=info.inicio?new Date(info.inicio).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'-';
+      var cor=isEnc?'background:var(--cd);opacity:.85':'';
+      var btnCor=isEnc?'background:var(--td)':'';
+      var label=isEnc?'Ver':'Abrir';
+      var statusStr=isEnc?'ENCERRADO':'ATIVO';
+      var statusCor=isEnc?'color:var(--tm)':'color:var(--gn);font-weight:700';
+      return '<div class="sa-card" style="'+cor+'">'
+        +'<div class="sa-dot" style="'+(isEnc?'background:var(--tm);animation:none':'')+'"></div>'
+        +'<div class="sa-info">'
+        +'<div class="sa-title" style="'+(isEnc?'color:var(--td)':'')+'">'+info.titulo+'</div>'
+        +'<div class="sa-sub">'+cntL+' &bull; '+dt+' &bull; <span style="'+statusCor+'">'+statusStr+'</span> &bull; '+(info.totalItens||0)+' itens</div>'
+        +'</div>'
+        +'<button class="sa-btn" style="'+btnCor+'" data-sid="'+s.id+'">'+label+'</button>'
+        +'</div>';
     }
 
-    if(encerradas.length&&encList){
-      if(encDiv)encDiv.style.display='';
-      encList.innerHTML=encerradas.map(function(s){
-        var info=s.info;
-        var cntL=cnts[(info.contagem||1)-1]||info.contagem+'a';
-        var dt=info.inicio?new Date(info.inicio).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'-';
-        return '<div class="sa-card" style="opacity:.8">'
-          +'<div class="sa-dot" style="background:var(--tm);animation:none"></div>'
-          +'<div class="sa-info"><div class="sa-title" style="color:var(--td)">'+info.titulo+'</div>'
-          +'<div class="sa-sub">'+cntL+' &bull; '+dt+' &bull; ENCERRADO &bull; '+(info.totalItens||0)+' itens</div>'
-          +'</div><button class="sa-btn" style="background:var(--td)" data-sid="'+s.id+'">Ver</button></div>';
-      }).join('');
-      encList.style.display='flex';
-      encList.style.flexDirection='column';
-      encList.style.gap='.4rem';
-      encList.querySelectorAll('.sa-btn[data-sid]').forEach(function(btn){
-        btn.addEventListener('click',function(){reconectarSessao(this.getAttribute('data-sid'));});
-      });
+    // Mostrar TODAS as sessoes em um bloco unico visivel
+    if(container)container.style.display='';
+    if(list){
+      if(!todas.length){
+        list.innerHTML='<p style="font-size:.75rem;color:var(--tm)">Nenhuma sessao encontrada.</p>';
+      } else {
+        var html='';
+        if(ativas.length){
+          html+='<div style="font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--gn);padding:.2rem 0">Ativas ('+ativas.length+')</div>';
+          html+=ativas.map(function(s){return buildCard(s,false);}).join('');
+        }
+        if(encerradas.length){
+          html+='<div style="font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--tm);padding:.4rem 0 .2rem">Encerradas ('+encerradas.length+')</div>';
+          html+=encerradas.map(function(s){return buildCard(s,true);}).join('');
+        }
+        list.innerHTML=html;
+        list.querySelectorAll('.sa-btn[data-sid]').forEach(function(btn){
+          btn.addEventListener('click',function(){reconectarSessao(this.getAttribute('data-sid'));});
+        });
+      }
     }
-  }catch(e){console.error('carregarSessoesAtivas:',e);}
+    // Esconder elemento encDiv separado (nao precisamos mais)
+    if(encDiv)encDiv.style.display='none';
+  }catch(e){
+    console.error('carregarSessoesAtivas:',e);
+    if(list)list.innerHTML='<p style="color:var(--rd);font-size:.78rem">Erro: '+e.message+'</p>';
+  }
 }
+
+
 function toggleEncerradas(){
   var list=document.getElementById('sessEncList'),arrow=document.getElementById('encArrow');
   if(!list)return;
