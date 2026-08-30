@@ -445,8 +445,28 @@ async function gerarRelatorio(){
       }
       return row;
     });
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(resumo),'Resumo');
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),'Analitico');
+    // Calcular linha de Total
+    var totTotal=0,totConf=0,totDiv=0,totPend=0;
+    resumo.slice(1).forEach(function(r){totTotal+=r[2]||0;totConf+=r[3]||0;totDiv+=r[4]||0;totPend+=r[5]||0;});
+    var totAcc=totTotal>0?Math.round(totConf/totTotal*100)+'%':'0%';
+    resumo.push(['','Total',totTotal,totConf,totDiv,totPend,totAcc]);
+
+    // Gerar planilha de Resumo com formatacao
+    var wsRes=XLSX.utils.aoa_to_sheet(resumo);
+    // Larguras das colunas
+    wsRes['!cols']=[{wch:40},{wch:10},{wch:8},{wch:12},{wch:12},{wch:10},{wch:10}];
+    // Negrito na ultima linha (Total)
+    var lastRow=resumo.length;
+    ['A','B','C','D','E','F','G'].forEach(function(col){
+      var cell=wsRes[col+lastRow];
+      if(cell)cell.s={font:{bold:true},fill:{fgColor:{rgb:'D9EAD3'}}};
+    });
+
+    var wsAna=XLSX.utils.aoa_to_sheet(rows);
+    wsAna['!cols']=[{wch:40},{wch:8},{wch:30},{wch:10},{wch:40},{wch:6},{wch:12},{wch:8},{wch:8},{wch:8},{wch:12},{wch:20},{wch:15}];
+
+    XLSX.utils.book_append_sheet(wb,wsRes,'Resumo');
+    XLSX.utils.book_append_sheet(wb,wsAna,'Analitico');
     XLSX.writeFile(wb,'Relatorio_OE_'+new Date().toISOString().slice(0,10)+'.xlsx');
   }catch(e){alert('Erro: '+e.message);}
   if(btn){btn.disabled=false;btn.textContent='&#128229; Gerar e Exportar Excel';}
