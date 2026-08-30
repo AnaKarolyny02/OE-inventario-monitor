@@ -1240,6 +1240,8 @@ function setTab(t){
     var el=document.getElementById('t'+x.charAt(0).toUpperCase()+x.slice(1));
     if(el)el.classList.toggle('active',x===t);
   });
+  // Relatorio: chamar direto (nao pelo rTab que retorna cedo)
+  if(t==='rel'){var c=document.getElementById('tabC');if(c)rRel(c);return;}
   rTab();
 }
 
