@@ -1557,8 +1557,10 @@ async function confirmarRecontagem(){
   diagLog('Recontagem: '+nRec+' itens (divergentes/pendentes/NC)');
   await fbP(PATH+'/sessoes/'+newId+'/info',info);
   await fbP(PATH+'/sessoes/'+newId+'/itens',itensRec);
-  await fbP(PATH+'/sessao_ativa',newId);
+  await fbP(PATH+'/sessoa_ativa',newId);
   sid=newId;titulo=t;inicio=now.toLocaleString('pt-BR');contagem=newCont;
+  // IMPORTANTE: atualizar itens para os da nova sessao (so divergentes/pendentes)
+  itens=itensRec;
   sepData={};logData=[];naoId={};
   document.getElementById('hSess').textContent=titulo;
   document.getElementById('hTs').textContent='Inicio: '+inicio;
