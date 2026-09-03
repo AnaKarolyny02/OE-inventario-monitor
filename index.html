@@ -719,97 +719,62 @@ function fbPo(p,d){return fbReq('POST',p,d);}
 function parsePlanilha(buf){
   var wb=XLSX.read(buf,{type:'array'}),ws=wb.Sheets[wb.SheetNames[0]];
   var rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+  if(!rows.length)throw new Error('Arquivo vazio');
+
+  // Detectar linha do cabecalho (procurar 'produto' nas primeiras 6 linhas)
   var hr=-1;
   for(var i=0;i<Math.min(6,rows.length);i++)
-    if(rows[i].some(function(c){return String(c).toLowerCase().indexOf('produto')>=0;})){hr=i;break;}
-  if(hr<0)throw new Error('Cabecalho nao encontrado');
+    if(rows[i].some(function(c){return String(c).toLowerCase().trim().indexOf('produto')>=0;})){hr=i;break;}
+  if(hr<0)throw new Error('Cabecalho com coluna "Produto" nao encontrado');
+
   var h=rows[hr].map(function(c){return String(c).trim().toLowerCase();});
-  var ic=h.findIndex(function(x){return (x.indexOf('cod')>=0||x.indexOf('c\u00f3d')>=0)&&x.indexOf('prod')>=0;});
-  var ip=h.findIndex(function(x){return x==='produto';});
+
+  // Detectar formato:
+  // Formato Sankhya: tem "Cod. Produto" -> ic > 0
+  // Formato Locacoes: nao tem cod produto, tem "Cod. Local" como identificador
+  var ic=h.findIndex(function(x){return (x.indexOf('cod')>=0||x.indexOf('c?d')>=0)&&x.indexOf('prod')>=0;});
+  var iCodLocal=h.findIndex(function(x){return (x.indexOf('cod')>=0||x.indexOf('c?d')>=0)&&x.indexOf('local')>=0;});
+  var ip=h.findIndex(function(x){return x==='produto';});if(ip<0)ip=0;
   var iu=h.findIndex(function(x){return x.indexOf('unid')>=0;});
   var ie=h.findIndex(function(x){return x.indexOf('estoque')>=0;});
   var ict=h.findIndex(function(x){return x==='controle';});
   var il=h.findIndex(function(x){return x==='local';});
-  var ilp=h.findIndex(function(x){return x.indexOf('pai')>=0;});
-  if(ic<0)ic=0;if(ip<0)ip=1;if(ie<0)ie=4;if(il<0)il=6;
+  var ilp=h.findIndex(function(x){return x.indexOf('local pai')>=0||x.indexOf('local_pai')>=0;});
+
+  var usaCodLocal=(ic<0)&&iCodLocal>=0;
   var res={};
   for(var j=hr+1;j<rows.length;j++){
-    var row=rows[j],raw=row[ic];
-    if(!raw&&raw!==0)continue;
-    var num=parseFloat(String(raw));
-    if(isNaN(num))continue;
-    var cod=String(Math.round(num));
-    if(!cod||cod==='0')continue;
+    var row=rows[j];
+    var cod,produto,esperado;
+    if(usaCodLocal){
+      // Formato Locacoes: usar Cod. Local como identificador
+      var rawLocal=row[iCodLocal];
+      if(!rawLocal&&rawLocal!==0)continue;
+      // Remover .0 de numeros
+      cod=String(rawLocal).replace(/\.0+$/,'').trim();
+      if(!cod||cod==='0')continue;
+    }else{
+      // Formato Sankhya: usar Cod. Produto
+      var raw=row[ic];
+      if(!raw&&raw!==0)continue;
+      var num=parseFloat(String(raw));
+      if(isNaN(num))continue;
+      cod=String(Math.round(num));
+      if(!cod||cod==='0')continue;
+    }
+    produto=ip>=0?String(row[ip]||'').trim():'';
+    esperado=ie>=0?(parseFloat(String(row[ie]||'').replace(/,/g,'.'))||0):0;
     var ctrl=ict>=0?String(row[ict]||'').trim():'';
+    if(ctrl==='N/A'||ctrl==='n/a')ctrl='';
+    var local=il>=0?String(row[il]||'').trim():'';
+    var localPai=ilp>=0?String(row[ilp]||'').trim():'';
     var itemKey=ctrl?(cod+'~'+ctrl):cod;
-    res[itemKey]={
-      codOriginal:cod,
-      produto:String(row[ip]||'').trim(),
-      unidade:String(row[iu]||'').trim(),
-      esperado:parseFloat(String(row[ie]||'').replace(/,/g,'.'))||0,
-      local:String(row[il]||'').trim(),
-      controle:ctrl,
-      localPai:ilp>=0?String(row[ilp]||'').trim():''
-    };
+    res[itemKey]={codOriginal:cod,produto:produto,unidade:iu>=0?String(row[iu]||'').trim():'',
+      controle:ctrl,esperado:esperado,local:local,localPai:localPai};
   }
   return res;
 }
 
-// Dropzone
-document.getElementById('dz').onclick=function(){document.getElementById('fi').click();};
-document.getElementById('dz').ondragover=function(e){e.preventDefault();document.getElementById('dz').classList.add('drag');};
-document.getElementById('dz').ondragleave=function(){document.getElementById('dz').classList.remove('drag');};
-document.getElementById('dz').ondrop=function(e){e.preventDefault();document.getElementById('dz').classList.remove('drag');if(e.dataTransfer.files[0])loadFile(e.dataTransfer.files[0]);};
-document.getElementById('fi').onchange=function(e){if(e.target.files[0])loadFile(e.target.files[0]);};
-
-function loadFile(f){
-  var r=new FileReader();
-  r.onload=function(e){
-    try{
-      parsedItens=parsePlanilha(new Uint8Array(e.target.result));
-      var n=Object.keys(parsedItens).length;
-      var locs=[...new Set(Object.values(parsedItens).map(function(i){return i.local;}).filter(Boolean))];
-      document.getElementById('dz').classList.add('loaded');
-      document.getElementById('dz').innerHTML='&#9989; '+f.name+'<small>'+n+' itens &bull; '+locs.length+' locais</small>';
-      document.getElementById('btnIniciar').disabled=false;
-    }catch(err){alert('Erro ao ler planilha: '+err.message);}
-  };
-  r.readAsArrayBuffer(f);
-}
-
-// Setup / Monitor toggle
-function abrirSetup(){
-  document.getElementById('monitor').style.display='none';
-  document.getElementById('setup').style.display='flex';
-  if(pollT){clearInterval(pollT);pollT=null;}
-  limparEstadoMon();
-}
-
-async function iniciar(){
-  var t=document.getElementById('titulo').value.trim()||'Inventario';
-  if(!parsedItens){alert('Carregue a planilha primeiro.');return;}
-  var btn=document.getElementById('btnIniciar');
-  btn.disabled=true;btn.textContent='Iniciando...';
-  var newId='S'+Date.now();
-  var now=new Date();
-  var gid='G'+Date.now();
-  var info={titulo:t,inicio:now.toISOString(),status:'ativo',totalItens:Object.keys(parsedItens).length,
-    locais:locaisUnicos(parsedItens),contagem:1,grupoId:gid};
-  grupoId=gid;  // setar grupoId imediatamente
-  var ok1=await fbP(PATH+'/sessoes/'+newId+'/info',info);
-  var ok2=await fbP(PATH+'/sessoes/'+newId+'/itens',parsedItens);
-  var ok3=await fbP(PATH+'/sessao_ativa',newId);
-  if(!ok1||!ok2||!ok3){alert('Erro ao criar sessao. Verifique a URL do Firebase.');btn.disabled=false;btn.textContent='+ Iniciar Nova Sessao';return;}
-  sid=newId;itens=parsedItens;titulo=t;inicio=now.toLocaleString('pt-BR');contagem=1;grupoId=gid;
-  abrirMonitor();
-}
-
-async function reconectar(){
-  var id=await fbG(PATH+'/sessao_ativa');
-  if(!id){alert('Nenhuma sessao ativa.');return;}
-  await carregarSessao(id);
-  abrirMonitor();
-}
 
 function locaisUnicos(its){
   return [...new Set(Object.values(its||itens).map(function(i){return i.local;}).filter(Boolean))].sort();
@@ -1405,11 +1370,10 @@ function rNi(c){
 }
 
 async function rCmp(c){
-  if(!grupoId){c.innerHTML='<div class="empty"><span>\uD83D\uDCCA</span>Nenhum grupo de recontagem disponivel</div>';return;}
+  if(!grupoId){c.innerHTML='<div class="empty"><span>&#128202;</span>Nenhum grupo de recontagem disponivel</div>';return;}
   var ids=(grupoSessoes[grupoId]||[]).sort(function(a,b){return (sessoesList[a].contagem||1)-(sessoesList[b].contagem||1);});
-  if(ids.length<2){c.innerHTML='<div class="empty"><span>\uD83D\uDCCA</span>Inicie uma recontagem para comparar resultados</div>';return;}
-  c.innerHTML='<div class="empty"><span>\u23F3</span>Carregando comparacao...</div>';
-  // Load all sessions data
+  if(ids.length<2){c.innerHTML='<div class="empty"><span>&#128202;</span>Inicie uma recontagem para comparar resultados</div>';return;}
+  c.innerHTML='<div class="empty"><span>&#8987;</span>Carregando comparacao...</div>';
   var sessData=[];
   for(var i=0;i<ids.length;i++){
     var d=await fbG(PATH+'/sessoes/'+ids[i]);
@@ -1422,32 +1386,109 @@ async function rCmp(c){
   }
   var cntLabels=['1a','2a','3a'];
   var baseItens=itens;
-  var html='<div class="cmp-intro">Comparacao entre '
-    +ids.length+' contagens da sessao <strong>'+sessoesList[ids[0]].titulo+'</strong>. '
-    +'Itens marcados em vermelho indicam divergencia entre contagens.</div>';
+
+  // Calcular acuracia por contagem
+  var acuracias=sessData.map(function(s){
+    var conf=0,tot=Object.keys(baseItens).length;
+    Object.entries(baseItens).forEach(function(e){
+      var b=s.m[e[0]]||0;
+      if(b===e[1].esperado&&b>0)conf++;
+    });
+    return tot>0?Math.round(conf/tot*100):0;
+  });
+
+  var html='<div style="display:flex;align-items:center;gap:.7rem;margin-bottom:.7rem;flex-wrap:wrap">';
+  html+='<div class="cmp-intro" style="flex:1;margin:0">Comparacao entre '+ids.length+' contagens ? <strong>'+sessoesList[ids[0]].titulo+'</strong></div>';
+  html+='<button onclick="exportarComparacao()" class="btn btn-s" style="font-size:.75rem;padding:.35rem .75rem;flex-shrink:0">&#128229; Exportar Excel</button>';
+  html+='</div>';
+
+  // Cards de acuracia por contagem
+  html+='<div style="display:flex;gap:.5rem;margin-bottom:.75rem;flex-wrap:wrap">';
+  sessData.forEach(function(s,i){
+    var acc=acuracias[i];
+    var cor=acc>=95?'var(--gn)':acc>=70?'var(--yw)':'var(--rd)';
+    html+='<div style="background:var(--sf);border:1px solid var(--br);border-radius:10px;padding:.55rem .85rem;text-align:center;min-width:100px">'
+      +'<div style="font-size:1.3rem;font-weight:800;color:'+cor+'">'+acc+'%</div>'
+      +'<div style="font-size:.68rem;color:var(--td)">'+(cntLabels[i]||((i+1)+'a'))+' Contagem</div>'
+      +'</div>';
+  });
+  html+='</div>';
+
   html+='<table class="dt"><thead><tr><th>Codigo</th><th>Produto</th><th>Local</th><th style="text-align:right">Esperado</th>';
-  sessData.forEach(function(s,i){html+='<th style="text-align:right">'+(cntLabels[i]||((i+1)+'a'))+' Cont.</th>';});
-  html+='<th>Acordo</th></tr></thead><tbody>';
+  sessData.forEach(function(s,i){html+='<th style="text-align:right">'+(cntLabels[i]||((i+1)+'a'))+'</th>';});
+  html+='<th>Acordo</th><th>Acuracia</th></tr></thead><tbody>';
+
   Object.entries(baseItens).forEach(function(e){
     var cod=e[0],it=e[1];
     var vals=sessData.map(function(s){return s.m[cod]||0;});
     var allMatch=vals.every(function(v){return v===vals[0];});
-    var anyMatch=vals.some(function(v){return v===it.esperado;});
-    html+='<tr><td class="mono">'+cod+'</td>'
-      +'<td style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+it.produto+'</td>'
+    var codDisp=it.codOriginal||cod.split('~')[0].split('|')[0];
+    html+='<tr><td class="mono">'+codDisp+'</td>'
+      +'<td style="max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+it.produto+'</td>'
       +'<td style="font-size:.7rem;color:var(--td)">'+it.local+'</td>'
       +'<td style="text-align:right">'+it.esperado+'</td>';
     vals.forEach(function(v){
-      var cls=v===0?'c-pend':(v===it.esperado?'c-match':'c-diff');
-      html+='<td style="text-align:right" class="'+cls+'">'+(v||'?')+'</td>';
+      var cor=v===0?'color:var(--tm)':v===it.esperado?'color:var(--gn);font-weight:700':'color:var(--rd);font-weight:700';
+      html+='<td style="text-align:right;'+cor+'">'+(v||'?')+'</td>';
     });
-    var acordo=allMatch&&vals[0]===it.esperado?'<span class="pill p-ok">OK</span>'
-      :(allMatch?'<span class="pill p-dv">Consistente*</span>':'<span class="pill p-pd">Diverge</span>');
-    html+='<td>'+acordo+'</td></tr>';
+    var acordo=allMatch&&vals[0]===it.esperado
+      ?'<span class="pill p-ok">OK</span>'
+      :(allMatch?'<span class="pill p-pd">Consistente*</span>':'<span class="pill p-dv">Diverge</span>');
+    // Acuracia do item: quantas contagens acertaram
+    var acItem=vals.filter(function(v){return v===it.esperado;}).length+'/'+vals.length;
+    html+='<td>'+acordo+'</td><td style="font-size:.72rem;color:var(--td);text-align:center">'+acItem+'</td></tr>';
   });
-  html+='</tbody></table><p style="font-size:.7rem;color:var(--tm);margin-top:.5rem">* Consistente = todas as contagens concordam entre si, mas diferem do sistema.</p>';
+  html+='</tbody></table>';
+  html+='<p style="font-size:.7rem;color:var(--tm);margin-top:.5rem">* Consistente = todas as contagens concordam, mas diferem do sistema.</p>';
   c.innerHTML=html;
+
+  // Guardar dados para exportar
+  window._cmpSessData=sessData;
+  window._cmpIds=ids;
+  window._cmpAcuracias=acuracias;
 }
+
+async function exportarComparacao(){
+  if(!window._cmpSessData){alert('Abra a aba Comparacao primeiro.');return;}
+  var sessData=window._cmpSessData,ids=window._cmpIds,acuracias=window._cmpAcuracias;
+  var cntLabels=['1a','2a','3a'];
+
+  // Aba Resumo
+  var resumo=[['Contagem','Total Itens','Conferidos','Divergentes','Pendentes','Acuracia %']];
+  sessData.forEach(function(s,i){
+    var conf=0,div=0,pend=0,tot=Object.keys(itens).length;
+    Object.entries(itens).forEach(function(e){
+      var b=s.m[e[0]]||0,esp=e[1].esperado;
+      if(b===0)pend++;else if(b===esp)conf++;else div++;
+    });
+    resumo.push([(cntLabels[i]||((i+1)+'a'))+' Contagem',tot,conf,div,pend,acuracias[i]+'%']);
+  });
+
+  // Aba Comparacao item a item
+  var header=['Codigo','Produto','Local','Esperado'];
+  sessData.forEach(function(s,i){header.push((cntLabels[i]||((i+1)+'a'))+' Cont.');});
+  header.push('Acordo','Acuracia Item');
+  var rows=[header];
+  Object.entries(itens).forEach(function(e){
+    var cod=e[0],it=e[1];
+    var vals=sessData.map(function(s){return s.m[cod]||0;});
+    var allMatch=vals.every(function(v){return v===vals[0];});
+    var acordo=allMatch&&vals[0]===it.esperado?'OK':(allMatch?'Consistente':'Diverge');
+    var acItem=vals.filter(function(v){return v===it.esperado;}).length+'/'+vals.length;
+    var codDisp=it.codOriginal||cod.split('~')[0].split('|')[0];
+    rows.push([codDisp,it.produto,it.local,it.esperado].concat(vals).concat([acordo,acItem]));
+  });
+
+  var wb=XLSX.utils.book_new();
+  var wsRes=XLSX.utils.aoa_to_sheet(resumo);
+  wsRes['!cols']=[{wch:15},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12}];
+  var wsComp=XLSX.utils.aoa_to_sheet(rows);
+  wsComp['!cols']=[{wch:12},{wch:40},{wch:30},{wch:10},{wch:12},{wch:12},{wch:12},{wch:14},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,wsRes,'Resumo');
+  XLSX.utils.book_append_sheet(wb,wsComp,'Comparacao');
+  XLSX.writeFile(wb,'Comparacao_OE_'+new Date().toISOString().slice(0,10)+'.xlsx');
+}
+
 
 // Recontagem
 function iniciarRecontagem(){
