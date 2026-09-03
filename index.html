@@ -1585,24 +1585,43 @@ async function encerrar(){
   alert('Sessao encerrada. Pode iniciar recontagem se necessario.');
 }
 
-function exportar(){
+async function exportar(){
   var m=calcMerged().m;
+  // Status esta na posicao 8 (indice correto)
   var rows=[['Cod.','Produto','Unidade','Controle','Local','Qtd.Sistema','Qtd.Fisica','Diferenca','Status','Separadores']];
   Object.entries(itens).forEach(function(e){
     var cod=e[0],it=e[1],b=m[cod]||0,d=b-it.esperado;
     var st=b===0?'Pendente':b===it.esperado?'Conferido':'Divergente';
     var seps=[];Object.entries(sepData).forEach(function(se){if(se[1].bipagens&&se[1].bipagens[cod])seps.push(se[0]);});
-    var expCod=it.codOriginal||cod.split('~')[0].split('|')[0];rows.push([expCod,it.produto,it.unidade,it.controle||'',it.local,it.esperado,b>0?b:0,b>0?d:'',st,seps.join(', ')]);
+    var expCod=it.codOriginal||cod.split('~')[0].split('|')[0];
+    rows.push([expCod,it.produto,it.unidade||'',it.controle||'',it.local,it.esperado,b>0?b:0,b>0?d:'',st,seps.join(', ')]);
   });
-  var conf=rows.slice(1).filter(function(r){return r[7]==='Conferido';}).length;
+  // Status esta em r[8] (corrigido)
+  var conf=rows.slice(1).filter(function(r){return r[8]==='Conferido';}).length;
+  var divg=rows.slice(1).filter(function(r){return r[8]==='Divergente';}).length;
+  var pend=rows.slice(1).filter(function(r){return r[8]==='Pendente';}).length;
   var tot=rows.length-1;
-  rows.push([]);rows.push(['Acuracia:',Math.round(conf/tot*100)+'%','Conferidos:',conf,'Divergentes:',rows.slice(1).filter(function(r){return r[7]==='Divergente';}).length,'Pendentes:',rows.slice(1).filter(function(r){return r[7]==='Pendente';}).length,'Total:',tot]);
+  rows.push([]);
+  rows.push(['Acuracia:',tot>0?Math.round(conf/tot*100)+'%':'0%','Conferidos:',conf,'Divergentes:',divg,'Pendentes:',pend,'Total:',tot]);
+  // Nao identificados com descricao do catalogo
   if(Object.keys(naoId).length){
-    rows.push([]);rows.push(['=== CODIGOS NAO IDENTIFICADOS ===']);
-    rows.push(['Codigo','Ocorrencias','Separadores']);
-    Object.entries(naoId).forEach(function(e){rows.push([e[0],e[1].cnt,[...new Set(e[1].seps)].join(', ')]);});
+    var cat=await getCatalogo();
+    rows.push([]);
+    rows.push(['=== CODIGOS NAO IDENTIFICADOS ===']);
+    rows.push(['Codigo','Descricao','Unidade','Controle','Ocorrencias','Separadores']);
+    Object.entries(naoId).forEach(function(e){
+      var cod=e[0],ni=e[1];
+      var desc=ni.descricao||'';
+      var unidade='',controle='';
+      if(!desc||desc===cod||desc==='Item nao previsto'||desc==='Nao previsto'){
+        var found=buscarNomeCatalogo(cat,cod);
+        if(found){desc=found.produto||desc;unidade=found.unidade||'';controle=found.controle||'';}
+      }
+      rows.push([cod,desc||'Sem descricao',unidade,controle,ni.cnt,[...new Set(ni.seps)].join(', ')]);
+    });
   }
   var ws=XLSX.utils.aoa_to_sheet(rows),wb=XLSX.utils.book_new();
+  ws['!cols']=[{wch:12},{wch:40},{wch:6},{wch:12},{wch:30},{wch:10},{wch:10},{wch:10},{wch:12},{wch:25}];
   XLSX.utils.book_append_sheet(wb,ws,'Inventario');
   XLSX.writeFile(wb,'Inventario_OE_'+new Date().toISOString().slice(0,10)+'.xlsx');
 }
