@@ -177,6 +177,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     <input type="text" class="form-input" id="titulo" placeholder="Titulo da sessao (ex: Inventario Bloco 01)" maxlength="60">
     <button class="btn btn-p" id="btnIniciar" onclick="iniciar()" disabled>&#10133; Iniciar Nova Sessao</button>
     <p style="text-align:center;font-size:.68rem;color:var(--tm)">Oliveira Energia S.A. &mdash; Almoxarifado</p>
+    <button onclick="voltarMonitor()" class="btn btn-s" style="font-size:.78rem">&#8592; Voltar ao Monitor</button>
   </div>
   <!-- Sessoes encerradas -->
   <div id="sessEncDiv" style="display:none;width:100%;max-width:500px">
@@ -286,11 +287,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     <input type="text" class="form-input" id="recTitulo" placeholder="Titulo da recontagem">
     <div class="modal-btns">
       <button class="btn btn-s" onclick="fecharModal()">Cancelar</button>
-      <button class="btn btn-p" onclick="confirmarRecontagem()">Confirmar Recontagem</button>
-    </div>
-  </div>
-</div>
-<script>
+      <button
 // Toggle catalogo no painel
 function toggleCatalogo(){
   var body=document.getElementById('catBody'),arrow=document.getElementById('catArrow');
@@ -677,8 +674,7 @@ async function rNi(c){
   html+='</tbody></table>';
   c.innerHTML=html;
 }
-
-
+<script>
 var DB_URL='https://inventarium-43347-default-rtdb.firebaseio.com', PATH='/oe_inventario';
 var sid=null, itens={}, sepData={}, logData=[], naoId={}, tab='all', titulo='', inicio='', pollT=null;
 var sessoesList={};  // {id: info}
@@ -1680,6 +1676,155 @@ async function carregarMaisRecenteAtiva(){
   return true;
 }
 
+
+function abrirSetup(){
+  // Mostrar tela de setup para nova sessao
+  document.getElementById('setup').style.display='flex';
+  document.getElementById('monitor').style.display='none';
+  // Recarregar sessoes ativas na tela de setup
+  carregarSessoesAtivas();
+  // Garantir que o dropzone funciona
+  inicializarDz();
+}
+
+function voltarMonitor(){
+  document.getElementById('setup').style.display='none';
+  document.getElementById('monitor').style.display='flex';
+}
+
+function inicializarDz(){
+  var dz=document.getElementById('dz'),fi=document.getElementById('fi');
+  if(!dz||!fi||dz._dzOk)return;
+  dz._dzOk=true;
+  dz.onclick=function(){fi.click();};
+  dz.ondragover=function(e){e.preventDefault();dz.classList.add('drag');};
+  dz.ondragleave=function(){dz.classList.remove('drag');};
+  dz.ondrop=function(e){
+    e.preventDefault();dz.classList.remove('drag');
+    if(e.dataTransfer.files[0])processarArquivo(e.dataTransfer.files[0]);
+  };
+  fi.onchange=function(e){if(e.target.files[0])processarArquivo(e.target.files[0]);};
+}
+
+
+async function iniciar(){
+  var t=document.getElementById('titulo').value.trim()||'Inventario';
+  if(!parsedItens||Object.keys(parsedItens).length===0){
+    alert('Carregue a planilha primeiro e verifique se ela tem itens validos.');
+    return;
+  }
+  var btn=document.getElementById('btnIniciar');
+  btn.disabled=true;btn.textContent='Iniciando...';
+  try{
+    var newId='S'+Date.now();
+    var now=new Date();
+    var gid='G'+Date.now();
+    var locs=locaisUnicos(parsedItens);
+    var info={titulo:t,inicio:now.toISOString(),status:'ativo',
+      totalItens:Object.keys(parsedItens).length,locais:locs,contagem:1,grupoId:gid};
+    grupoId=gid;
+    var ok1=await fbP(PATH+'/sessoes/'+newId+'/info',info);
+    var ok2=await fbP(PATH+'/sessoes/'+newId+'/itens',parsedItens);
+    await fbP(PATH+'/sessao_ativa',newId);
+    if(ok1===null&&ok2===null){
+      alert('Erro de conexao com Firebase. Verifique sua internet.');
+      btn.disabled=false;btn.textContent='+ Iniciar Nova Sessao';
+      return;
+    }
+    sid=newId;titulo=t;inicio=now.toLocaleString('pt-BR');contagem=1;
+    itens=parsedItens;parsedItens=null;
+    sepData={};logData=[];naoId={};
+    // Voltar para o monitor
+    voltarMonitor();
+    document.getElementById('hSess').textContent=titulo;
+    document.getElementById('hTs').textContent='Inicio: '+inicio;
+    document.getElementById('sTot').textContent=Object.keys(itens).length;
+    document.getElementById('sLoc').textContent=locs.length;
+    document.getElementById('hBadge').className='bdg bdg-on';
+    document.getElementById('hBadge').textContent='\u25cf ATIVO';
+    document.getElementById('hCnt').style.display='none';
+    // Resetar dropzone
+    var dz=document.getElementById('dz');
+    if(dz){dz.innerHTML='&#128196; Arraste a planilha ou clique para selecionar<small>.xls ou .xlsx</small><input type="file" id="fi" accept=".xls,.xlsx" hidden>';dz._dzOk=false;}
+    document.getElementById('titulo').value='';
+    btn.disabled=true;btn.textContent='+ Iniciar Nova Sessao';
+    setTab('all');
+    await carregarListaSessoes();
+    atualizarRcBar();
+    if(pollT)clearInterval(pollT);
+    pollT=setInterval(poll,2500);poll();
+    salvarEstadoMon();
+  }catch(e){
+    alert('Erro ao criar sessao: '+e.message);
+    btn.disabled=false;btn.textContent='+ Iniciar Nova Sessao';
+  }
+}
+
+
+function selecionarTodas(){
+  document.querySelectorAll('.rel-check').forEach(function(cb){cb.checked=true;});
+}
+
+async function gerarRelatorio(){
+  var checks=Array.from(document.querySelectorAll('.rel-check:checked')).map(function(cb){return cb.value;});
+  if(!checks.length){alert('Selecione pelo menos uma sessao.');return;}
+  var btn=document.querySelector('[onclick="gerarRelatorio()"]');
+  if(btn){btn.disabled=true;btn.textContent='Carregando...';}
+  try{
+    var rows=[['Sessao','Contagem','Local','Codigo','Produto','Unidade','Controle','Esperado','Bipado','Diferenca','Status','Separador','Fiscal']];
+    var resumo=[['Sessao','Contagem','Total','Conferidos','Divergentes','Pendentes','Acuracia %']];
+    for(var ci=0;ci<checks.length;ci++){
+      var sessId=checks[ci];
+      var iR=await fetch(DB_URL+PATH+'/sessoes/'+sessId+'/info.json');
+      var info=iR.ok?await iR.json():{};
+      var iT=await fetch(DB_URL+PATH+'/sessoes/'+sessId+'/itens.json');
+      var its=iT.ok?await iT.json():{};
+      var iS=await fetch(DB_URL+PATH+'/sessoes/'+sessId+'/separadores.json');
+      var seps=iS.ok?await iS.json():{};
+      var cntL=['1a','2a','3a'][(info.contagem||1)-1]||info.contagem+'a';
+      var m={},sepN={},fisN={};
+      Object.entries(seps||{}).forEach(function(e){
+        var s=e[1];
+        if(s.bipagens)Object.entries(s.bipagens).forEach(function(b){
+          m[b[0]]=(m[b[0]]||0)+(b[1].contagem||0);
+          if(!sepN[b[0]])sepN[b[0]]=[];
+          sepN[b[0]].push(s.nome||'?');
+          if(s.fiscal&&!fisN[b[0]])fisN[b[0]]=s.fiscal;
+        });
+      });
+      var conf=0,div=0,pend=0,tot=Object.keys(its||{}).length;
+      Object.entries(its||{}).forEach(function(e){
+        var key=e[0],it=e[1],b=m[key]||0;
+        var st=b===0?'Pendente':(b===(it.esperado||0)?'Conferido':'Divergente');
+        if(st==='Conferido')conf++;else if(st==='Divergente')div++;else pend++;
+        var cod=it.codOriginal||key.split('~')[0].split('|')[0];
+        rows.push([info.titulo,cntL,it.local||'',cod,it.produto||'',it.unidade||'',it.controle||'',it.esperado||0,b,b>0?(b-(it.esperado||0)):0,st,(sepN[key]||[]).join(', '),fisN[key]||'']);
+      });
+      resumo.push([info.titulo,cntL,tot,conf,div,pend,tot>0?Math.round(conf/tot*100)+'%':'0%']);
+    }
+    var totT=0,totC=0,totD=0,totP=0;
+    resumo.slice(1).forEach(function(r){totT+=r[2]||0;totC+=r[3]||0;totD+=r[4]||0;totP+=r[5]||0;});
+    resumo.push(['','Total',totT,totC,totD,totP,totT>0?Math.round(totC/totT*100)+'%':'0%']);
+    var cat=await getCatalogo();
+    rows=rows.map(function(row){
+      if(row[10]==='Pendente'&&!row[4]){
+        var found=buscarNomeCatalogo(cat,String(row[3]));
+        if(found){row[4]=found.produto;row[5]=found.unidade;row[6]=found.controle;}
+      }
+      return row;
+    });
+    var wb=XLSX.utils.book_new();
+    var wsRes=XLSX.utils.aoa_to_sheet(resumo);
+    wsRes['!cols']=[{wch:40},{wch:10},{wch:8},{wch:12},{wch:12},{wch:10},{wch:10}];
+    var wsAna=XLSX.utils.aoa_to_sheet(rows);
+    wsAna['!cols']=[{wch:40},{wch:8},{wch:30},{wch:10},{wch:40},{wch:6},{wch:12},{wch:8},{wch:8},{wch:8},{wch:12},{wch:20},{wch:15}];
+    XLSX.utils.book_append_sheet(wb,wsRes,'Resumo');
+    XLSX.utils.book_append_sheet(wb,wsAna,'Analitico');
+    XLSX.writeFile(wb,'Relatorio_OE_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  }catch(e){alert('Erro: '+e.message);}
+  if(btn){btn.disabled=false;btn.textContent='Gerar e Exportar Excel';}
+}
+
 (async function(){
   try{
     // Abrir direto na tela principal
@@ -1752,6 +1897,9 @@ async function reconectarSessao(id){
   await carregarSessao(id);
   abrirMonitor();
 }
+
+
+
 </script>
 </body>
 </html>
