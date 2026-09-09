@@ -1683,8 +1683,19 @@ function abrirSetup(){
   document.getElementById('monitor').style.display='none';
   // Recarregar sessoes ativas na tela de setup
   carregarSessoesAtivas();
-  // Garantir que o dropzone funciona
+  // Garantir que o dropzone de sessao funciona
   inicializarDz();
+  // Inicializar dropzone do catalogo
+  var dzC=document.getElementById('dzCat'),fiC=document.getElementById('fiCat');
+  if(dzC&&fiC&&!dzC._ok){
+    dzC._ok=true;
+    dzC.onclick=function(){fiC.click();};
+    dzC.ondragover=function(e){e.preventDefault();dzC.classList.add('drag');};
+    dzC.ondragleave=function(){dzC.classList.remove('drag');};
+    dzC.ondrop=function(e){e.preventDefault();dzC.classList.remove('drag');if(e.dataTransfer.files[0])loadCatalogo(e.dataTransfer.files[0]);};
+    fiC.onchange=function(e){if(e.target.files[0])loadCatalogo(e.target.files[0]);};
+  }
+  verificarCatalogo();
 }
 
 function voltarMonitor(){
@@ -1699,11 +1710,29 @@ function inicializarDz(){
   dz.onclick=function(){fi.click();};
   dz.ondragover=function(e){e.preventDefault();dz.classList.add('drag');};
   dz.ondragleave=function(){dz.classList.remove('drag');};
+  function carregarArq(f){
+    var rd=new FileReader();
+    rd.onload=function(ev){
+      try{
+        parsedItens=parsePlanilha(new Uint8Array(ev.target.result));
+        var n=Object.keys(parsedItens).length;
+        var locs=locaisUnicos(parsedItens);
+        dz.innerHTML='&#9989; '+f.name+'<small>'+n+' itens &bull; '+locs.length+' locais</small>';
+        dz.classList.add('loaded');
+        var btn=document.getElementById('btnIniciar');
+        if(btn)btn.disabled=(n===0);
+      }catch(err){
+        alert('Erro ao ler planilha: '+err.message);
+        parsedItens=null;
+      }
+    };
+    rd.readAsArrayBuffer(f);
+  }
   dz.ondrop=function(e){
     e.preventDefault();dz.classList.remove('drag');
-    if(e.dataTransfer.files[0])processarArquivo(e.dataTransfer.files[0]);
+    if(e.dataTransfer.files[0])carregarArq(e.dataTransfer.files[0]);
   };
-  fi.onchange=function(e){if(e.target.files[0])processarArquivo(e.target.files[0]);};
+  fi.onchange=function(e){if(e.target.files[0])carregarArq(e.target.files[0]);};
 }
 
 
