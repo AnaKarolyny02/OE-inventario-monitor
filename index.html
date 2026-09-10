@@ -673,6 +673,7 @@ async function rNi(c){
       +'<td style="font-size:.72rem;color:var(--td)">'+(ni.seps||[]).join(', ')+'</td></tr>';
   });
   htm
+<script>
 var DB_URL='https://inventarium-43347-default-rtdb.firebaseio.com', PATH='/oe_inventario';
 var sid=null, itens={}, sepData={}, logData=[], naoId={}, tab='all', titulo='', inicio='', pollT=null;
 var sessoesList={};  // {id: info}
@@ -1791,6 +1792,11 @@ function abrirSetup(){
 function voltarMonitor(){
   document.getElementById('setup').style.display='none';
   document.getElementById('monitor').style.display='flex';
+  // Recarregar lista de sessoes e retomar poll se necessario
+  carregarListaSessoes();
+  if(sid&&!pollT){
+    pollT=setInterval(poll,2500);poll();
+  }
 }
 
 function inicializarDz(){
@@ -2042,14 +2048,10 @@ async function reconectarSessao(id){
 }
 
 
-
-{
+async function reconectarSessao(id){
   await carregarSessao(id);
   abrirMonitor();
 }
-
-
-
 </script>
 </body>
 </html>
