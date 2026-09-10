@@ -743,8 +743,9 @@ function parsePlanilha(buf){
   var iu=h.findIndex(function(x){return x.indexOf('unid')>=0;});
   var ie=h.findIndex(function(x){return x.indexOf('estoque')>=0;});
   var ict=h.findIndex(function(x){return x==='controle';});
-  var il=h.findIndex(function(x){return x==='local';});
+  var il=h.findIndex(function(x){return x==='local'&&x.indexOf('cod')<0&&x.indexOf('pai')<0;});
   var ilp=h.findIndex(function(x){return x.indexOf('local pai')>=0||x.indexOf('local_pai')>=0;});
+  var ilc=h.findIndex(function(x){return (x.indexOf('cod')>=0||x.indexOf('c?d')>=0)&&x.indexOf('local')>=0&&x.indexOf('pai')<0;});
 
   // Formato: se nao tem cod produto mas tem cod local, usar locacoes
   var usaCodLocal=(ic<0)&&iCodLocal>=0;
@@ -774,9 +775,10 @@ function parsePlanilha(buf){
     var local=il>=0?String(row[il]||'').trim():'';
     var localPai=ilp>=0?String(row[ilp]||'').trim():'';
     var itemKey=ctrl?(cod+'~'+ctrl):cod;
+    var codLocal=ilc>=0?String(row[ilc]||'').replace(/\.0+$/,'').trim():'';
     res[itemKey]={codOriginal:cod,produto:produto,
       unidade:iu>=0?String(row[iu]||'').trim():'',
-      controle:ctrl,esperado:esperado,local:local,localPai:localPai};
+      controle:ctrl,esperado:esperado,local:local,localPai:localPai,codLocal:codLocal};
   }
   return res;
 }
@@ -1381,7 +1383,7 @@ function rTab(){
       +'<td class="mono" style="'+codStyle+'">'+cod+'</td>'
       +'<td style="font-size:.75rem">'+it.produto+'</td>'
       +'<td style="font-size:.7rem;color:var(--td)">'+( it.controle||'')+'</td>'
-      +'<td class="mono" style="font-size:.65rem;color:var(--tm)">'+( it.local?it.local.replace(/\s+/g,'').substr(0,12):'')+'</td>'
+      +'<td class="mono" style="font-size:.65rem;color:var(--tm)">'+(it.codLocal||'')+'</td>'
       +'<td style="font-size:.7rem;color:var(--td)">'+( it.local||'')+'</td>'
       +'<td style="font-size:.7rem;color:var(--tm)">'+( it.unidade||'')+'</td>'
       +'<td style="text-align:right;font-weight:600">'+esp+'</td>';
