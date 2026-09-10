@@ -261,6 +261,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
       <div id="locCards"><p style="color:var(--tm);font-size:.75rem">Aguardando...</p></div>
     </aside>
     <div class="main-area">
+      <div id="accPanel" style="display:none"></div>
       <div class="rc-bar hidden" id="rcBar">
         <span class="rc-info" id="rcInfo"></span>
         <button class="btn btn-s" id="rcBtn" onclick="iniciarRecontagem()" style="font-size:.73rem;padding:.32rem .75rem">Iniciar Recontagem</button>
@@ -671,10 +672,7 @@ async function rNi(c){
       +'<td style="text-align:right;font-weight:700;color:#2563EB">'+ni.cnt+'</td>'
       +'<td style="font-size:.72rem;color:var(--td)">'+(ni.seps||[]).join(', ')+'</td></tr>';
   });
-  html+='</tbody></table>';
-  c.innerHTML=html;
-}
-<script>
+  htm
 var DB_URL='https://inventarium-43347-default-rtdb.firebaseio.com', PATH='/oe_inventario';
 var sid=null, itens={}, sepData={}, logData=[], naoId={}, tab='all', titulo='', inicio='', pollT=null;
 var sessoesList={};  // {id: info}
@@ -1156,7 +1154,17 @@ function calcMerged(){
     else if(b===it.esperado)conf++;
     else div++;
   });
-  return{m:m,conf:conf,div:div,pend:pend};
+  var paraMais=0,paraMenos=0,naoEnc=0;
+  Object.entries(itens).forEach(function(e){
+    var key=e[0],it=e[1];
+    var b=m[key]||0;
+    if(!b){var c=it.codOriginal||key.split('|')[0];b=m[c]||0;}
+    if(!b){b=m[key.replace(/\|/g,'~')]||0;}
+    if(b===0){naoEnc++;}
+    else if(b>it.esperado){paraMais++;}
+    else if(b<it.esperado){paraMenos++;}
+  });
+  return{m:m,conf:conf,div:div,pend:pend,paraMais:paraMais,paraMenos:paraMenos,naoEnc:naoEnc};
 }
 
 // Buscar contagem de um item espec?fico no sepData (com fallback)
@@ -1176,13 +1184,62 @@ function getBipCount(key){
 
 function rStats(){
   var c=calcMerged();
+  var tot=Object.keys(itens).length;
+  var ni=Object.keys(naoId).length;
+  // Header stats
   document.getElementById('sConf').textContent=c.conf;
   document.getElementById('sDiv').textContent=c.div;
   document.getElementById('sPend').textContent=c.pend;
-  var ni=Object.keys(naoId).length;
+  document.getElementById('sTot').textContent=tot;
   [['Div',c.div],['Pend',c.pend],['Ni',ni]].forEach(function(x){
-    var el=document.getElementById('b'+x[0]);el.style.display=x[1]>0?'':'none';el.textContent=x[1];
+    var el=document.getElementById('b'+x[0]);if(el){el.style.display=x[1]>0?'':'none';el.textContent=x[1];}
   });
+  // Painel de acuracia
+  var acc=tot>0?Math.round(c.conf/tot*100):0;
+  var divPct=tot>0?Math.round(c.div/tot*100):0;
+  var pMaisP=c.div>0?Math.round(c.paraMais/c.div*100):0;
+  var pMenosP=c.div>0?Math.round(c.paraMenos/c.div*100):0;
+  var posFinal=c.conf+c.div; // itens que foram contados
+  var accFinal=posFinal>0?Math.round(c.conf/posFinal*100):0;
+  var el=document.getElementById('accPanel');
+  if(!el)return;
+  el.innerHTML=
+    '<div style="display:flex;gap:.8rem;flex-wrap:wrap">'
+    // Bloco 1: Itens Auditados DESUP
+    +'<div style="flex:1;min-width:200px">'
+    +'<table style="width:100%;border-collapse:collapse;font-size:.78rem">'
+    +'<thead><tr><td colspan="2" style="background:#1A5E38;color:#fff;font-weight:700;padding:.35rem .6rem;border-radius:6px 6px 0 0">Itens Auditados DESUP</td></tr></thead>'
+    +'<tbody>'
+    +'<tr><td style="padding:.3rem .5rem;border:1px solid var(--br)">Posicao Inicial</td><td style="padding:.3rem .5rem;border:1px solid var(--br);text-align:right;font-weight:700">'+tot+'</td></tr>'
+    +'<tr><td style="padding:.3rem .5rem;border:1px solid var(--br);background:rgba(22,163,74,.08)">Acuracidade</td><td style="padding:.3rem .5rem;border:1px solid var(--br);text-align:right;color:var(--gn);font-weight:700">'+c.conf+' ? '+acc+'%</td></tr>'
+    +'<tr><td style="padding:.3rem .5rem;border:1px solid var(--br);background:rgba(220,38,38,.07)">Divergencias</td><td style="padding:.3rem .5rem;border:1px solid var(--br);text-align:right;color:var(--rd);font-weight:700">'+c.div+' ? '+divPct+'%</td></tr>'
+    +'<tr><td style="padding:.3rem .5rem;border:1px solid var(--br);font-weight:700">Total de Itens</td><td style="padding:.3rem .5rem;border:1px solid var(--br);text-align:right;font-weight:800">'+tot+' ? 100%</td></tr>'
+    +'</tbody></table>'
+    +'<table style="width:100%;border-collapse:collapse;font-size:.78rem;margin-top:.4rem">'
+    +'<tbody>'
+    +'<tr><td style="padding:.3rem .5rem;border:1px solid var(--br);color:var(--rd)">Posicao Inicial</td><td style="padding:.3rem .5rem;border:1px solid var(--br);text-align:right">'+tot+'</td></tr>'
+    +'<tr><td style="padding:.3rem .5rem;border:1px solid var(--br);color:var(--rd)">Nao Encontrados</td><td style="padding:.3rem .5rem;border:1px solid var(--br);text-align:right">'+c.naoEnc+'</td></tr>'
+    +'<tr><td style="padding:.3rem .5rem;border:1px solid var(--br);color:#2563EB">Inseridos (+)</td><td style="padding:.3rem .5rem;border:1px solid var(--br);text-align:right">'+ni+'</td></tr>'
+    +'<tr><td style="padding:.3rem .5rem;border:1px solid var(--br);color:#2563EB">Pos. Final Itens Conf.</td><td style="padding:.3rem .5rem;border:1px solid var(--br);text-align:right">'+posFinal+'</td></tr>'
+    +'</tbody></table>'
+    +'</div>'
+    // Bloco 2: Para Mais / Para Menos
+    +'<div style="flex:1;min-width:200px">'
+    +'<table style="width:100%;border-collapse:collapse;font-size:.78rem">'
+    +'<thead><tr><td colspan="3" style="background:#2D8048;color:#fff;font-weight:700;padding:.35rem .6rem;border-radius:6px 6px 0 0">Posicao Final Itens Conf.</td></tr></thead>'
+    +'<tbody>'
+    +'<tr><td style="padding:.3rem .5rem;border:1px solid var(--br);color:#2563EB">Pos. Final</td><td style="padding:.3rem .5rem;border:1px solid var(--br);text-align:right;font-weight:700">'+posFinal+'</td><td style="padding:.3rem .5rem;border:1px solid var(--br);text-align:right">100%</td></tr>'
+    +'<tr><td style="padding:.3rem .5rem;border:1px solid var(--br);background:rgba(22,163,74,.08);color:var(--gn)">Acuracidade</td><td style="padding:.3rem .5rem;border:1px solid var(--br);text-align:right;color:var(--gn);font-weight:700">'+c.conf+'</td><td style="padding:.3rem .5rem;border:1px solid var(--br);text-align:right;color:var(--gn);font-weight:700">'+accFinal+'%</td></tr>'
+    +'<tr><td style="padding:.3rem .5rem;border:1px solid var(--br);background:rgba(220,38,38,.07);color:var(--rd)">Divergencias</td><td style="padding:.3rem .5rem;border:1px solid var(--br);text-align:right;color:var(--rd);font-weight:700">'+c.div+'</td><td style="padding:.3rem .5rem;border:1px solid var(--br);text-align:right;color:var(--rd);font-weight:700">'+(posFinal>0?Math.round(c.div/posFinal*100):0)+'%</td></tr>'
+    +'</tbody></table>'
+    +'<table style="width:100%;border-collapse:collapse;font-size:.78rem;margin-top:.4rem">'
+    +'<tbody>'
+    +'<tr><td style="padding:.3rem .5rem;border:1px solid var(--br);color:var(--rd)">Para Menos (-)</td><td style="padding:.3rem .5rem;border:1px solid var(--br);text-align:right;font-weight:700">'+c.paraMenos+'</td><td style="padding:.3rem .5rem;border:1px solid var(--br);text-align:right">'+pMenosP+'%</td></tr>'
+    +'<tr><td style="padding:.3rem .5rem;border:1px solid var(--br);color:var(--gn)">Para Mais (+)</td><td style="padding:.3rem .5rem;border:1px solid var(--br);text-align:right;font-weight:700">'+c.paraMais+'</td><td style="padding:.3rem .5rem;border:1px solid var(--br);text-align:right">'+pMaisP+'%</td></tr>'
+    +'<tr><td style="padding:.3rem .5rem;border:1px solid var(--br);font-weight:800">Divergencias</td><td style="padding:.3rem .5rem;border:1px solid var(--br);text-align:right;font-weight:800">'+c.div+'</td><td style="padding:.3rem .5rem;border:1px solid var(--br);text-align:right;font-weight:800">100%</td></tr>'
+    +'</tbody></table>'
+    +'</div>'
+    +'</div>';
 }
 
 function rLocais(){
@@ -1236,125 +1293,118 @@ function rTab(){
   if(tab==='cmp'){rCmp(c);return;}
   if(tab==='rel'){rRel(c);return;}
   var m=calcMerged().m;
-
-  var rows=Object.entries(itens).map(function(e){
-    var cod=e[0],it=e[1],b=m[cod]||0,d=b-it.esperado;
-    var st=b===0?'pend':b===it.esperado?'ok':'div';
-    if(tab==='div'&&st!=='div')return null;
-    if(tab==='pend'&&st!=='pend')return null;
-    var seps=[];
-    Object.entries(sepData).forEach(function(se){if(se[1].bipagens&&se[1].bipagens[cod])seps.push(se[0]);});
-    var nc=false;
-    Object.values(sepData).forEach(function(s){if(s.bipagens&&s.bipagens[cod]&&s.bipagens[cod].naoConformidade)nc=true;});
-    return{cod:cod,it:it,b:b,d:d,st:st,seps:seps,nc:nc};
-  }).filter(Boolean);
-
-  // Filtros de texto
-  if(filterVals.cod)rows=rows.filter(function(r){return r.cod.indexOf(filterVals.cod)>=0;});
-  if(filterVals.produto)rows=rows.filter(function(r){return r.it.produto.toLowerCase().indexOf(filterVals.produto)>=0;});
-  if(filterVals.local)rows=rows.filter(function(r){return r.it.local.toLowerCase().indexOf(filterVals.local)>=0;});
-  if(filterVals.unidade)rows=rows.filter(function(r){return (r.it.unidade||'').toLowerCase().indexOf(filterVals.unidade)>=0;});
-  if(filterVals.controle)rows=rows.filter(function(r){return (r.it.controle||'').toLowerCase().indexOf(filterVals.controle)>=0;});
-  if(filterVals.status)rows=rows.filter(function(r){
-    var lbl=r.st==='ok'?'conferido':r.st==='div'?'divergente':'pendente';
-    return lbl.indexOf(filterVals.status)>=0;
+  var keys=Object.keys(itens);
+  // Aplicar filtros
+  keys=keys.filter(function(k){
+    var it=itens[k];
+    var b=m[k]||0;
+    if(!b){var cb=it.codOriginal||k.split('|')[0];b=m[cb]||0;}
+    var cod=it.codOriginal||k.split('~')[0].split('|')[0];
+    var st=b===0?'FALSO':(b===it.esperado?'VERDADEIRO':'FALSO');
+    if(filterVals.cod&&cod.toLowerCase().indexOf(filterVals.cod)<0)return false;
+    if(filterVals.produto&&(it.produto||'').toLowerCase().indexOf(filterVals.produto)<0)return false;
+    if(filterVals.local&&(it.local||'').toLowerCase().indexOf(filterVals.local)<0)return false;
+    if(filterVals.controle&&(it.controle||'').toLowerCase().indexOf(filterVals.controle)<0)return false;
+    if(filterVals.status==='ok'&&st!=='VERDADEIRO')return false;
+    if(filterVals.status==='div'&&!(b>0&&b!==it.esperado))return false;
+    if(filterVals.status==='pend'&&b!==0)return false;
+    // Filtros de aba
+    if(tab==='div'&&!(b>0&&b!==it.esperado))return false;
+    if(tab==='pend'&&b!==0)return false;
+    return true;
   });
-
-  // Ordena??o
-  if(sortColIdx>=0){
-    rows.sort(function(a,b){
-      var av,bv;
-      if(sortColIdx===0){av=a.cod;bv=b.cod;}
-      else if(sortColIdx===1){av=a.it.produto;bv=b.it.produto;}
-      else if(sortColIdx===2){av=a.it.unidade||'';bv=b.it.unidade||'';}
-      else if(sortColIdx===3){av=a.it.local;bv=b.it.local;}
-      else if(sortColIdx===4){av=a.it.controle||'';bv=b.it.controle||'';}
-      else if(sortColIdx===5){av=a.it.esperado;bv=b.it.esperado;}
-      else if(sortColIdx===6){av=a.b;bv=b.b;}
-      else if(sortColIdx===7){av=a.d;bv=b.d;}
-      else if(sortColIdx===8){av=a.st;bv=b.st;}
-      else{av=a.seps.join(',');bv=b.seps.join(',');}
-      if(typeof av==='number')return sortDir*(av-bv);
-      return sortDir*(String(av).localeCompare(String(bv),'pt-BR'));
-    });
-  }
-
-  // Cabe?alho com sort
-  var cols=['Codigo','Produto','UN','Local','Controle','Esp.','Bip.','Dif.','Status','Separador'];
-  var thHtml=cols.map(function(lbl,i){
-    var ico=sortColIdx===i?(sortDir>0?'\u25B2':'\u25BC'):'\u25B2\u25BC';
-    var ac=sortColIdx===i?' style="color:var(--gn)"':'';
-    return '<th onclick="setSort('+i+')" style="cursor:pointer;user-select:none;'+(i>=4&&i<=6?'text-align:right;':'')+'">'
-      +lbl+'<span'+ac+' style="font-size:.58rem;margin-left:.2rem;opacity:.6">'+ico+'</span></th>';
-  }).join('');
-
-  // Linha de filtros
-  var fRow='<tr style="background:var(--cd)">'
-    +'<td style="padding:.22rem .3rem"><input style="width:100%;padding:.22rem .35rem;background:var(--bg);border:1px solid var(--br);border-radius:4px;color:var(--tx);font-size:.67rem;outline:none" placeholder="Filtrar..." value="'+filterVals.cod+'" oninput="setFilter(\'cod\',this.value)"></td>'
-    +'<td style="padding:.22rem .3rem"><input style="width:100%;padding:.22rem .35rem;background:var(--bg);border:1px solid var(--br);border-radius:4px;color:var(--tx);font-size:.67rem;outline:none" placeholder="Filtrar..." value="'+filterVals.produto+'" oninput="setFilter(\'produto\',this.value)"></td>'
-    +'<td style="padding:.22rem .3rem"><input style="width:100%;padding:.22rem .35rem;background:var(--bg);border:1px solid var(--br);border-radius:4px;color:var(--tx);font-size:.67rem;outline:none" placeholder="UN..." value="'+filterVals.unidade+'" oninput="setFilter(\'unidade\',this.value)"></td>'
-    +'<td style="padding:.22rem .3rem"><input style="width:100%;padding:.22rem .35rem;background:var(--bg);border:1px solid var(--br);border-radius:4px;color:var(--tx);font-size:.67rem;outline:none" placeholder="Filtrar..." value="'+filterVals.local+'" oninput="setFilter(\'local\',this.value)"></td>'
-    +'<td style="padding:.22rem .3rem"><input style="width:100%;padding:.22rem .35rem;background:var(--bg);border:1px solid var(--br);border-radius:4px;color:var(--tx);font-size:.67rem;outline:none" placeholder="Filtrar..." value="'+filterVals.controle+'" oninput="setFilter(\'controle\',this.value)"></td>'
-    +'<td colspan="3" style="padding:.22rem .3rem;font-size:.65rem;color:var(--tm);text-align:center">?</td>'
-    +'<td style="padding:.22rem .3rem"><input style="width:100%;padding:.22rem .35rem;background:var(--bg);border:1px solid var(--br);border-radius:4px;color:var(--tx);font-size:.67rem;outline:none" placeholder="Filtrar..." value="'+filterVals.status+'" oninput="setFilter(\'status\',this.value)"></td>'
-    +'<td style="padding:.22rem .3rem"></td></tr>';
-
-  var temFiltro=Object.values(filterVals).some(function(v){return v;});
-
-  if(!rows.length&&!temFiltro){c.innerHTML='<div class="empty"><span>\u2713</span>'+(tab==='div'?'Nenhuma divergencia':tab==='pend'?'Nenhum pendente':'Sem itens')+'</div>';return;}
-
-  var html='<table class="dt"><thead><tr>'+thHtml+'</tr>'+fRow+'</thead><tbody>';
-  rows.forEach(function(r){
-    var ncTag=r.nc?'<span style="font-size:.58rem;color:var(--yw);margin-left:.2rem">NC</span>':'';
-    var ctrlBadge=r.it.controle?'<span style="background:rgba(180,83,9,.12);color:var(--yw);border-radius:5px;font-size:.6rem;font-weight:700;padding:.08rem .3rem">'+r.it.controle+'</span>':'';
-    var codDisp=r.cod.indexOf('|')>=0?r.cod.split('|')[0]:r.cod;
-    html+='<tr>'
-      +'<td class="mono">'+codDisp+'</td>'
-      +'<td style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+r.it.produto+'">'+r.it.produto+'</td>'
-      +'<td style="font-size:.72rem;color:var(--td);font-weight:600">'+r.it.unidade+'</td>'
-      +'<td style="font-size:.7rem;color:var(--td)">'+r.it.local+ncTag+'</td>'
-      +'<td>'+ctrlBadge+'</td>'
-      +'<td style="text-align:right">'+r.it.esperado+'</td>'
-      +'<td style="text-align:right;font-weight:700">'+(r.b||'\u2014')+'</td>'
-      +'<td style="text-align:right" class="'+(r.d>0?'d-p':r.d<0?'d-n':'')+'">'+(r.d===0&&r.b===0?'\u2014':(r.d>0?'+':'')+r.d)+'</td>'
-      +'<td><span class="pill p-'+r.st+'">'+(r.st==='ok'?'Conferido':r.st==='div'?'Divergente':'Pendente')+'</span></td>'
-      +'<td style="font-size:.7rem">'+(r.seps.join(', ')||'\u2014')+'</td></tr>';
+  // Ordenar
+  if(sortColIdx>=0)keys.sort(function(a,b2){
+    var va=itens[a],vb=itens[b2];
+    var vals=[
+      va.codOriginal||a,va.produto,va.controle||'',
+      va.local||'',(va.esperado||0),(m[a]||0)
+    ];
+    var vala=vals[sortColIdx]||'',valb=[vb.codOriginal||b2,vb.produto,vb.controle||'',vb.local||'',(vb.esperado||0),(m[b2]||0)][sortColIdx]||'';
+    return typeof vala==='number'?(vala-valb)*sortDir:String(vala).localeCompare(String(valb))*sortDir;
   });
+  if(!keys.length){c.innerHTML='<div class="empty"><span>&#10003;</span>Nenhum item para exibir.</div>';return;}
 
-  // N?o previstos (itens encontrados mas fora da lista)
-  if(tab==='all'||tab==='div'){
-    var naoPrevsAll={};
-    Object.entries(sepData).forEach(function(se){
-      if(!se[1].naoPrevistos)return;
-      Object.entries(se[1].naoPrevistos).forEach(function(np){
-        var cod=np[0],v=np[1];
-        if(!naoPrevsAll[cod])naoPrevsAll[cod]={contagem:0,descricao:v.descricao||'',seps:[]};
-        naoPrevsAll[cod].contagem+=v.contagem||0;
-        naoPrevsAll[cod].seps.push(se[0]);
-      });
-    });
-    Object.entries(naoPrevsAll).forEach(function(e){
-      var cod=e[0],v=e[1];
-      if(filterVals.cod&&cod.indexOf(filterVals.cod)<0)return;
-      if(filterVals.produto&&v.descricao.toLowerCase().indexOf(filterVals.produto)<0)return;
-      html+='<tr style="background:rgba(37,99,235,.04)">'
-        +'<td class="mono">'+cod+'</td>'
-        +'<td style="font-size:.75rem">'+v.descricao+'</td>'
-        +'<td style="font-size:.7rem;color:#2563EB">Nao previsto</td>'
-        +'<td></td>'
-        +'<td style="text-align:right;color:var(--tm)">\u2014</td>'
-        +'<td style="text-align:right;font-weight:700;color:#2563EB">'+v.contagem+'</td>'
-        +'<td style="text-align:right;color:#2563EB">NP</td>'
-        +'<td><span style="background:rgba(37,99,235,.1);color:#2563EB;padding:.1rem .38rem;border-radius:8px;font-size:.65rem;font-weight:700">Nao Previsto</span></td>'
-        +'<td style="font-size:.7rem">'+v.seps.join(', ')+'</td></tr>';
-    });
-  }
+  // Detectar quantas contagens existem no grupo
+  var maxCnt=contagem||1;
+  var cntCols=[];
+  for(var ci=1;ci<=maxCnt;ci++)cntCols.push(ci+'a Cont.');
 
-  html+='</tbody></table>';
-  if(temFiltro)html+='<div style="font-size:.68rem;color:var(--tm);margin-top:.3rem;padding:.2rem">'
-    +rows.length+' resultado(s) &mdash; <a href="#" onclick="limparFiltros();return false" style="color:var(--gn)">Limpar filtros</a></div>';
+  var html='<div id="accPanel" style="margin-bottom:.8rem"></div>';
+  html+='<div style="overflow-x:auto"><table class="dt" id="mainTable">'
+    +'<thead><tr>'
+    +'<th onclick="setSort(0)" style="min-width:70px">Cod. Produto</th>'
+    +'<th onclick="setSort(1)" style="min-width:180px">Produto</th>'
+    +'<th onclick="setSort(2)" style="min-width:80px">Controle</th>'
+    +'<th onclick="setSort(3)" style="min-width:60px">Cod. Local</th>'
+    +'<th onclick="setSort(4)" style="min-width:120px">Local</th>'
+    +'<th style="min-width:40px">UN</th>'
+    +'<th onclick="setSort(5)" style="min-width:70px;text-align:right">Qtd. Estoque</th>';
+  cntCols.forEach(function(col){html+='<th style="min-width:70px;text-align:right">'+col+'</th>';});
+  html+='<th style="min-width:80px;text-align:right">Pos. Final</th>'
+    +'<th style="min-width:55px;text-align:right;color:var(--rd)">(-)</th>'
+    +'<th style="min-width:55px;text-align:right;color:var(--gn)">(+)</th>'
+    +'<th style="min-width:80px">Status</th>'
+    +'</tr>'
+    // Linha de filtros
+    +'<tr class="filter-row">'
+    +'<td><input value="'+filterVals.cod+'" oninput="setFilter(\'cod\',this.value)" placeholder="Filtrar..."></td>'
+    +'<td><input value="'+filterVals.produto+'" oninput="setFilter(\'produto\',this.value)" placeholder="Filtrar..."></td>'
+    +'<td><input value="'+filterVals.controle+'" oninput="setFilter(\'controle\',this.value)" placeholder=""></td>'
+    +'<td></td>'
+    +'<td><input value="'+filterVals.local+'" oninput="setFilter(\'local\',this.value)" placeholder="Filtrar..."></td>'
+    +'<td></td><td></td>';
+  cntCols.forEach(function(){html+='<td></td>';});
+  html+='<td></td><td></td><td></td>'
+    +'<td><select onchange="setFilter(\'status\',this.value)" style="width:100%;font-size:.65rem;background:var(--bg);border:1px solid var(--br);border-radius:4px;color:var(--tx)">'
+    +'<option value="">Todos</option>'
+    +'<option value="ok"'+(filterVals.status==='ok'?' selected':'')+'>OK</option>'
+    +'<option value="div"'+(filterVals.status==='div'?' selected':'')+'>Div.</option>'
+    +'<option value="pend"'+(filterVals.status==='pend'?' selected':'')+'>Pend.</option>'
+    +'</select></td></tr></thead><tbody>';
+
+  keys.forEach(function(key){
+    var it=itens[key];
+    var b=m[key]||0;
+    if(!b){var cb=it.codOriginal||key.split('|')[0];b=m[cb]||0;}
+    var esp=it.esperado||0;
+    var posFinal=b;
+    var menos=b>0&&b<esp?esp-b:0;
+    var mais=b>esp?b-esp:0;
+    var ok=(b>0&&b===esp);
+    var st=ok?'VERDADEIRO':'FALSO';
+    var cod=it.codOriginal||key.split('~')[0].split('|')[0];
+    var rowBg=b===0?'':(ok?'background:rgba(22,163,74,.04)':'background:rgba(220,38,38,.04)');
+    var codStyle=b===0?'color:var(--tm)':'';
+    html+='<tr style="'+rowBg+'">'
+      +'<td class="mono" style="'+codStyle+'">'+cod+'</td>'
+      +'<td style="font-size:.75rem">'+it.produto+'</td>'
+      +'<td style="font-size:.7rem;color:var(--td)">'+( it.controle||'')+'</td>'
+      +'<td class="mono" style="font-size:.65rem;color:var(--tm)">'+( it.local?it.local.replace(/\s+/g,'').substr(0,12):'')+'</td>'
+      +'<td style="font-size:.7rem;color:var(--td)">'+( it.local||'')+'</td>'
+      +'<td style="font-size:.7rem;color:var(--tm)">'+( it.unidade||'')+'</td>'
+      +'<td style="text-align:right;font-weight:600">'+esp+'</td>';
+    // Colunas de contagem (por enquanto so mostra a contagem atual)
+    for(var ci=1;ci<=maxCnt;ci++){
+      if(ci===maxCnt&&b>0){
+        var bc=b===esp?'color:var(--gn);font-weight:700':b>esp?'color:#2563EB;font-weight:700':'color:var(--rd);font-weight:700';
+        html+='<td style="text-align:right;'+bc+'">'+b+'</td>';
+      }else{
+        html+='<td style="text-align:right;color:var(--tm)">'+( b>0&&ci<maxCnt?b:'')+'</td>';
+      }
+    }
+    html+='<td style="text-align:right;font-weight:700">'+(b>0?b:'')+'</td>'
+      +'<td style="text-align:right;color:var(--rd);font-weight:600">'+(menos>0?menos:'')+'</td>'
+      +'<td style="text-align:right;color:var(--gn);font-weight:600">'+(mais>0?mais:'')+'</td>'
+      +'<td><span class="pill '+(ok?'p-ok':'p-dv')+'">'+st+'</span></td>'
+      +'</tr>';
+  });
+  html+='</tbody></table></div>';
   c.innerHTML=html;
+  // Renderizar painel de acuracia
+  rStats();
 }
+
 
 function rFeed(c){
   if(!logData.length){c.innerHTML='<div class="empty"><span>\uD83D\uDCE1</span>Aguardando bipagens...</div>';return;}
@@ -1614,6 +1664,35 @@ async function exportar(){
   if(Object.keys(naoId).length){
     var cat=await getCatalogo();
     rows.push([]);
+    // Linha de Para Mais / Para Menos
+    var c2=calcMerged();
+    rows.push([]);
+    rows.push(['=== RESUMO DE DIVERGENCIAS ===']);
+    rows.push(['Para Menos (-):',c2.paraMenos,'itens com quantidade abaixo do esperado']);
+    rows.push(['Para Mais (+):',c2.paraMais,'itens com quantidade acima do esperado']);
+    rows.push(['Nao Encontrados:',c2.naoEnc,'itens com bipagem = 0']);
+    rows.push(['Total Divergencias:',c2.div,'']);
+    rows.push([]);
+    rows.push(['=== ITENS PARA MENOS (-) ===']);
+    rows.push(['Cod.','Produto','Local','Esperado','Bipado','Diferenca']);
+    Object.entries(itens).forEach(function(e){
+      var key=e[0],it=e[1],b=c2.m[key]||0;
+      if(b>0&&b<it.esperado){
+        var cod=it.codOriginal||key.split('~')[0].split('|')[0];
+        rows.push([cod,it.produto,it.local,it.esperado,b,b-it.esperado]);
+      }
+    });
+    rows.push([]);
+    rows.push(['=== ITENS PARA MAIS (+) ===']);
+    rows.push(['Cod.','Produto','Local','Esperado','Bipado','Diferenca']);
+    Object.entries(itens).forEach(function(e){
+      var key=e[0],it=e[1],b=c2.m[key]||0;
+      if(b>it.esperado){
+        var cod=it.codOriginal||key.split('~')[0].split('|')[0];
+        rows.push([cod,it.produto,it.local,it.esperado,b,b-it.esperado]);
+      }
+    });
+    rows.push([]);
     rows.push(['=== CODIGOS NAO IDENTIFICADOS ===']);
     rows.push(['Codigo','Descricao','Unidade','Controle','Ocorrencias','Separadores']);
     Object.entries(naoId).forEach(function(e){
@@ -1860,6 +1939,30 @@ async function gerarRelatorio(){
     wsAna['!cols']=[{wch:40},{wch:8},{wch:30},{wch:10},{wch:40},{wch:6},{wch:12},{wch:8},{wch:8},{wch:8},{wch:12},{wch:20},{wch:15}];
     XLSX.utils.book_append_sheet(wb,wsRes,'Resumo');
     XLSX.utils.book_append_sheet(wb,wsAna,'Analitico');
+    // Aba Para Mais e Para Menos
+    var c3=calcMerged();
+    var pRows=[['=== PARA MENOS (-): itens com qtd abaixo do esperado ==='],
+      ['Sessao','Cod.','Produto','Local','Esperado','Bipado','Diferenca']];
+    Object.entries(itens).forEach(function(e){
+      var key=e[0],it=e[1],b=c3.m[key]||0;
+      if(b>0&&b<it.esperado){
+        var cod=it.codOriginal||key.split('~')[0].split('|')[0];
+        pRows.push([titulo,cod,it.produto,it.local,it.esperado,b,b-it.esperado]);
+      }
+    });
+    pRows.push([]);
+    pRows.push(['=== PARA MAIS (+): itens com qtd acima do esperado ===']);
+    pRows.push(['Sessao','Cod.','Produto','Local','Esperado','Bipado','Diferenca']);
+    Object.entries(itens).forEach(function(e){
+      var key=e[0],it=e[1],b=c3.m[key]||0;
+      if(b>it.esperado){
+        var cod=it.codOriginal||key.split('~')[0].split('|')[0];
+        pRows.push([titulo,cod,it.produto,it.local,it.esperado,b,b-it.esperado]);
+      }
+    });
+    var wsPM=XLSX.utils.aoa_to_sheet(pRows);
+    wsPM['!cols']=[{wch:35},{wch:10},{wch:40},{wch:30},{wch:10},{wch:10},{wch:10}];
+    XLSX.utils.book_append_sheet(wb,wsPM,'Para Mais e Menos');
     XLSX.writeFile(wb,'Relatorio_OE_'+new Date().toISOString().slice(0,10)+'.xlsx');
   }catch(e){alert('Erro: '+e.message);}
   if(btn){btn.disabled=false;btn.textContent='Gerar e Exportar Excel';}
@@ -1934,6 +2037,13 @@ async function carregarSessoesAtivas(){
 
 
 async function reconectarSessao(id){
+  await carregarSessao(id);
+  abrirMonitor();
+}
+
+
+
+{
   await carregarSessao(id);
   abrirMonitor();
 }
