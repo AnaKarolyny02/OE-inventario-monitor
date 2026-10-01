@@ -820,9 +820,22 @@ function abrirMonitor(){
 async function carregarListaSessoes(){
   try{
     // Shallow: pegar so as chaves
+    // Tentar com shallow=true primeiro, fallback sem ele
     var resp=await fetch(DB_URL+PATH+'/sessoes.json?shallow=true');
-    if(!resp.ok){document.getElementById('spList').innerHTML='<p style="font-size:.75rem;color:var(--tm);padding:.5rem">Erro ao carregar sessoes.</p>';return;}
-    var chaves=await resp.json();
+    var chaves=null;
+    if(resp.ok){
+      chaves=await resp.json();
+    } else {
+      // Fallback: buscar direto sem shallow
+      var resp2=await fetch(DB_URL+PATH+'/sessoes.json');
+      if(!resp2.ok){
+        var status=resp2.status;
+        document.getElementById('spList').innerHTML='<p style="font-size:.75rem;color:var(--rd);padding:.5rem">Erro '+status+' ao carregar sessoes.<br>Verifique as regras do Firebase.</p>';
+        return;
+      }
+      var raw=await resp2.json();
+      if(raw){chaves={};Object.keys(raw).forEach(function(k){chaves[k]=true;});}
+    }
     if(!chaves){document.getElementById('spList').innerHTML='<p style="font-size:.75rem;color:var(--tm);padding:.5rem">Nenhuma sessao.</p>';return;}
     var ids=Object.keys(chaves);
     sessoesList={};grupoSessoes={};
