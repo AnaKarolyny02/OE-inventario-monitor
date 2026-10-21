@@ -1361,6 +1361,7 @@ function rTab(){
     +'<th style="min-width:55px;text-align:right;color:var(--rd)">(-)</th>'
     +'<th style="min-width:55px;text-align:right;color:var(--gn)">(+)</th>'
     +'<th style="min-width:80px">Status</th>'
+    +'<th style="width:32px"></th>'
     +'</tr>'
     // Linha de filtros
     +'<tr class="filter-row">'
@@ -1413,6 +1414,7 @@ function rTab(){
       +'<td style="text-align:right;color:var(--rd);font-weight:600">'+(menos>0?menos:'')+'</td>'
       +'<td style="text-align:right;color:var(--gn);font-weight:600">'+(mais>0?mais:'')+'</td>'
       +'<td><span class="pill '+(ok?'p-ok':'p-dv')+'">'+st+'</span></td>'
+      +(b>0?('<td><button data-k="'+key+'" onclick="zerarBipagem(this.dataset.k)" title="Zerar contagem" style="background:none;border:none;cursor:pointer;color:var(--tm);font-size:.82rem">&#128465;</button></td>'):'<td></td>')
       +'</tr>';
   });
   html+='</tbody></table></div>';
@@ -1987,6 +1989,21 @@ async function gerarRelatorio(){
     XLSX.writeFile(wb,'Relatorio_OE_'+new Date().toISOString().slice(0,10)+'.xlsx');
   }catch(e){alert('Erro: '+e.message);}
   if(btn){btn.disabled=false;btn.textContent='Gerar e Exportar Excel';}
+}
+
+
+async function zerarBipagem(key){
+  if(!confirm('Zerar a contagem deste item?\nTodos os separadores terao a bipagem zerada.'))return;
+  try{
+    var seps=Object.keys(sepData);
+    for(var i=0;i<seps.length;i++){
+      var encSep=seps[i];
+      if(sepData[encSep]&&sepData[encSep].bipagens&&sepData[encSep].bipagens[key]){
+        await fbP(PATH+'/sessoes/'+sid+'/separadores/'+encSep+'/bipagens/'+key,null);
+      }
+    }
+    await poll();
+  }catch(e){alert('Erro: '+e.message);}
 }
 
 (async function(){
