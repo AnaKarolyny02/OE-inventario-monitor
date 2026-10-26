@@ -1262,7 +1262,7 @@ function rLocais(){
   var locs=locaisUnicos(),c=calcMerged(),sL={};
   Object.entries(sepData).forEach(function(e){if(e[1].local)sL[e[0]]=e[1].local;});
   var cont=document.getElementById('locCards');
-  if(!locs.length){cont.innerHTML='<p style="color:var(--tm);font-size:.77rem">?</p>';return;}
+  if(!locs.length){cont.innerHTML='<p style="color:var(--tm);font-size:.77rem">Aguardando...</p>';return;}
   cont.innerHTML=locs.map(function(loc){
     var its=Object.entries(itens).filter(function(e){return e[1].local===loc;});
     var tot=its.length,conf2=0,dv=0;
@@ -1270,14 +1270,23 @@ function rLocais(){
     var pct=tot>0?Math.round((conf2+dv)/tot*100):0;
     var seps=Object.entries(sL).filter(function(e){return e[1]===loc;}).map(function(e){return e[0];});
     var col=pct>=95?'var(--gn)':pct>=70?'var(--yw)':'var(--rd)';
-    return '<div class="lc"><div class="lch"><span class="lcn">'+loc+'</span><span class="lcp">'+pct+'%</span></div>'
+    var isAtivo=(localFiltroAtivo===loc);
+    var borda=isAtivo?'border:2px solid var(--gn);background:var(--ch)':'border:1px solid var(--br)';
+    return '<div class="lc" onclick="clicarLocal(this.dataset.loc)" data-loc="'+loc.replace(/"/g,'&quot;')+'" style="cursor:pointer;'+borda+'">'
+      +'<div class="lch"><span class="lcn">'+(isAtivo?'<b>':'')+loc+(isAtivo?'</b>':'')+'</span>'
+      +'<span class="lcp" style="color:'+col+'">'+pct+'%</span></div>'
       +'<div class="lcbar"><div class="lcbar-f" style="width:'+pct+'%;background:'+col+'"></div></div>'
-      +'<div class="lcsep'+(seps.length?'':' empty')+'">'+( seps.length?'\uD83D\uDC64 '+seps.join(', '):'Sem separador')+'</div>'
-      +'<div class="lcc"><div class="lcct"><div class="n" style="color:var(--gn)">'+conf2+'</div><div class="l">OK</div></div>'
+      +'<div class="lcsep'+(seps.length?'':' empty')+'">'+(seps.length?'\uD83D\uDC64 '+seps.join(', '):'Sem separador')+'</div>'
+      +'<div class="lcc">'
+      +'<div class="lcct"><div class="n" style="color:var(--gn)">'+conf2+'</div><div class="l">OK</div></div>'
       +'<div class="lcct"><div class="n" style="color:var(--rd)">'+dv+'</div><div class="l">Div.</div></div>'
-      +'<div class="lcct"><div class="n">'+tot+'</div><div class="l">Tot.</div></div></div></div>';
+      +'<div class="lcct"><div class="n">'+tot+'</div><div class="l">Tot.</div></div>'
+      +'</div>'
+      +(isAtivo?'<div style="font-size:.65rem;color:var(--gn);text-align:center;padding:.1rem">\u2714 Clique para limpar</div>':'')
+      +'</div>';
   }).join('');
 }
+
 
 function setTab(t){
   tab=t;
