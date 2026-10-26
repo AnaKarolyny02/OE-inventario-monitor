@@ -1294,6 +1294,7 @@ function setTab(t){
 
 // Filtros e ordena??o
 var filterVals={cod:'',produto:'',unidade:'',local:'',controle:'',status:''};
+var localFiltroAtivo='';
 var sortColIdx=-1, sortDir=1;
 
 function setFilter(col,val){filterVals[col]=val.toLowerCase();rTab();}
@@ -1346,7 +1347,16 @@ function rTab(){
   var cntCols=[];
   for(var ci=1;ci<=maxCnt;ci++)cntCols.push(ci+'a Cont.');
 
-  var html='<div id="accPanel" style="margin-bottom:.8rem"></div>';
+  // Banner de filtro de local ativo
+  var bannerLocal='';
+  if(localFiltroAtivo){
+    bannerLocal='<div style="display:flex;align-items:center;gap:.6rem;padding:.4rem .7rem;background:rgba(22,163,74,.08);border:1px solid var(--gn);border-radius:8px;margin-bottom:.5rem;font-size:.78rem">'
+      +'<span style="color:var(--gn);font-weight:700">&#128205; '+localFiltroAtivo+'</span>'
+      +'<span style="flex:1;color:var(--td)">'+keys.length+' itens neste local</span>'
+      +'<button onclick="clicarLocal(localFiltroAtivo)" style="padding:.2rem .5rem;background:var(--cd);border:1px solid var(--br);border-radius:6px;cursor:pointer;font-size:.72rem">&#10005; Limpar filtro</button>'
+      +'</div>';
+  }
+  var html=bannerLocal+'<div id="accPanel" style="margin-bottom:.8rem"></div>';
   html+='<div style="overflow-x:auto"><table class="dt" id="mainTable">'
     +'<thead><tr>'
     +'<th onclick="setSort(0)" style="min-width:70px">Cod. Produto</th>'
@@ -2004,6 +2014,20 @@ async function zerarBipagem(key){
     }
     await poll();
   }catch(e){alert('Erro: '+e.message);}
+}
+
+
+function clicarLocal(loc){
+  if(localFiltroAtivo===loc){
+    // Segundo clique: desselecionar
+    localFiltroAtivo='';
+    filterVals.local='';
+  } else {
+    localFiltroAtivo=loc;
+    filterVals.local=loc.toLowerCase();
+  }
+  rLocais(); // re-render para atualizar destaque
+  rTab();    // re-render tabela filtrada
 }
 
 (async function(){
